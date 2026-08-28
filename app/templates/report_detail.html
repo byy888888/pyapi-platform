@@ -1,0 +1,196 @@
+{% if not embedded %}
+{% extends "base.html" %}
+{% endif %}
+
+{% block title %}报告详情 - 接口自动化测试平台{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1 class="h4 mb-1">报告详情 #{{ history.id }}</h1>
+      <p class="text-secondary mb-0">{{ history.task_name or '手动执行' }} · {{ history.trigger_type }}</p>
+    </div>
+    {% if not embedded %}
+      <a class="btn btn-outline-secondary" href="{{ url_for('reports.index') }}">返回报告列表</a>
+    {% endif %}
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+      <div class="metric-card">
+        <div class="metric-label">总数</div>
+        <div class="metric-value">{{ history.total_count }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="metric-card">
+        <div class="metric-label">成功</div>
+        <div class="metric-value text-success">{{ history.success_count }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="metric-card">
+        <div class="metric-label">失败</div>
+        <div class="metric-value text-danger">{{ history.fail_count }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="metric-card">
+        <div class="metric-label">错误</div>
+        <div class="metric-value text-warning">{{ history.error_count }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel mb-3">
+    <h2 class="h5 mb-3">执行概要</h2>
+    <div class="row g-3 small">
+      <div class="col-md-3"><span class="text-secondary">状态：</span>{{ history.status }}</div>
+      <div class="col-md-3"><span class="text-secondary">环境：</span>{{ history.environment.name if history.environment else '' }}</div>
+      <div class="col-md-3"><span class="text-secondary">开始：</span>{{ history.start_time|local_datetime }}</div>
+      <div class="col-md-3"><span class="text-secondary">结束：</span>{{ history.end_time|local_datetime }}</div>
+      <div class="col-md-3"><span class="text-secondary">是否中断：</span>{{ '是' if history.interrupted else '否' }}</div>
+      <div class="col-md-9"><span class="text-secondary">报告链接：</span>{{ report_url }}</div>
+    </div>
+  </div>
+
+  <div class="panel mb-3">
+    <h2 class="h5 mb-3">失败详情</h2>
+    {% if failed_details %}
+      {% for detail in failed_details %}
+        <div class="border rounded p-3 mb-2">
+          <div class="d-flex justify-content-between gap-3">
+            <div>
+              <span class="badge text-bg-danger">{{ detail.status }}</span>
+              <span class="fw-semibold ms-2">{{ detail.case_name }}</span>
+              <span class="text-secondary ms-2">{{ detail.interface_name }}</span>
+            </div>
+            <div class="text-secondary small">{{ detail.time_taken_ms or '-' }} ms</div>
+          </div>
+          <div class="mt-2 small">
+            <div><span class="text-secondary">URL：</span><span class="font-monospace">{{ detail.url }}</span></div>
+            <div><span class="text-secondary">方法：</span>{{ detail.method }}</div>
+            <div><span class="text-secondary">失败原因：</span>{{ detail.error_message }}</div>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="text-secondary">暂无失败详情</div>
+    {% endif %}
+  </div>
+
+  <div class="panel mb-3">
+    <h2 class="h5 mb-3">失败断言</h2>
+    {% if assertion_failures %}
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>用例</th>
+            <th>接口</th>
+            <th>断言</th>
+            <th>实际值</th>
+            <th>期望值</th>
+            <th>比较器</th>
+            <th>原因</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in assertion_failures %}
+            <tr>
+              <td>{{ item.detail.case_name }}</td>
+              <td>{{ item.detail.interface_name }}</td>
+              <td>{{ item.name }}</td>
+              <td><code>{{ item.actual }}</code></td>
+              <td><code>{{ item.expected }}</code></td>
+              <td>{{ item.comparator_label or item.comparator }}</td>
+              <td>{{ item.message }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="text-secondary">暂无失败断言</div>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h2 class="h5 mb-3">执行详情</h2>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width: 70px;">顺序</th>
+            <th>集合</th>
+            <th>用例</th>
+            <th>接口</th>
+            <th style="width: 90px;">方法</th>
+            <th>URL</th>
+            <th style="width: 90px;">状态</th>
+            <th style="width: 100px;">耗时</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for detail in details %}
+            <tr>
+              <td>{{ detail.sort_order }}</td>
+              <td>{{ detail.suite_name }}</td>
+              <td>{{ detail.case_name }}</td>
+              <td>{{ detail.interface_name }}</td>
+              <td>{{ detail.method }}</td>
+              <td class="code-cell">{{ detail.url }}</td>
+              <td>
+                {% if detail.status == 'pass' %}
+                  <span class="badge text-bg-success">pass</span>
+                {% elif detail.status == 'skipped' %}
+                  <span class="badge text-bg-secondary">skipped</span>
+                {% else %}
+                  <span class="badge text-bg-danger">{{ detail.status }}</span>
+                {% endif %}
+              </td>
+              <td>{{ detail.time_taken_ms or '-' }} ms</td>
+            </tr>
+            <tr>
+              <td></td>
+              <td colspan="7">
+                <div class="small">
+                  {% if detail.interface_type == 'websocket' %}
+                    <div class="d-flex flex-wrap gap-3 mb-2">
+                      <span>连接：<strong>{{ '成功' if detail.response_snapshot.connected else '失败' }}</strong></span>
+                      <span>连接耗时：<strong>{{ detail.response_snapshot.connection_time_ms or '-' }} ms</strong></span>
+                      <span>关闭：<strong>{{ '是' if detail.response_snapshot.closed else '否' }}</strong></span>
+                    </div>
+                    {% if detail.request_snapshot.steps %}
+                      <div class="d-flex flex-wrap gap-2 mb-2">
+                        {% for step in detail.request_snapshot.steps %}
+                          <span class="badge {{ 'text-bg-success' if step.passed else 'text-bg-danger' }}">{{ step.name or step.type }} · {{ step.time_taken_ms or 0 }} ms</span>
+                        {% endfor %}
+                      </div>
+                    {% endif %}
+                    {% if detail.assertions_detail %}
+                      <table class="table table-sm mb-2">
+                        <thead><tr><th>步骤</th><th>断言</th><th>期望值</th><th>实际值</th><th>结果</th></tr></thead>
+                        <tbody>{% for item in detail.assertions_detail %}<tr><td>{{ item.step_name or '-' }}</td><td>{{ item.name }}</td><td><code>{{ item.expected }}</code></td><td><code>{{ item.actual }}</code></td><td><span class="badge {{ 'text-bg-success' if item.passed else 'text-bg-danger' }}">{{ '通过' if item.passed else '失败' }}</span></td></tr>{% endfor %}</tbody>
+                      </table>
+                    {% endif %}
+                    {% if detail.ws_messages %}
+                      <div class="border rounded bg-light p-2 font-monospace" style="max-height:260px;overflow:auto;">
+                        {% for message in detail.ws_messages %}<div><span class="text-secondary">#{{ message.sequence }}</span> <strong>{{ '发送' if message.direction == 'send' else ('接收' if message.direction == 'receive' else '系统') }}</strong> {{ message.data }}</div>{% endfor %}
+                      </div>
+                    {% endif %}
+                  {% else %}
+                    <div><span class="text-secondary">响应摘要：</span><code>{{ detail.response_snapshot }}</code></div>
+                    {% if detail.assertions_detail %}<div class="mt-1"><span class="text-secondary">断言详情：</span><code>{{ detail.assertions_detail }}</code></div>{% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="8" class="text-center text-secondary py-4">暂无详情</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

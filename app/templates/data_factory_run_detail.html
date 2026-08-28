@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}数据工厂执行详情 - 接口自动化测试平台{% endblock %}
+
+{% block head %}
+<style>
+  .run-step { border: 1px solid #dfe4ea; border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+  .run-step-head { padding: 12px 14px; background: #f8fafc; border-bottom: 1px solid #e5e7eb; }
+  .run-step-tabs { display: flex; gap: 4px; padding: 8px 12px 0; border-bottom: 1px solid #e5e7eb; }
+  .run-step-tab { border: 0; background: transparent; padding: 8px 10px; color: #475569; }
+  .run-step-tab.active { color: #0d6efd; border-bottom: 2px solid #0d6efd; }
+  .run-step-pane { display: none; padding: 14px; }
+  .run-step-pane.active { display: block; }
+  .run-snapshot { margin: 0; max-height: 460px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+  .wait-step-body { padding: 18px; color: #475569; }
+  .snapshot-section + .snapshot-section { margin-top: 14px; }
+  .snapshot-section-title { width: 100%; display: flex; align-items: center; justify-content: space-between; border: 0; background: transparent; padding: 0 0 7px; font-weight: 600; text-align: left; }
+  .snapshot-section-title:hover { color: #0d6efd; }
+  .snapshot-section-arrow { color: #64748b; font-size: 16px; }
+  .snapshot-content { margin: 0; padding: 12px; max-height: 360px; overflow: auto; white-space: pre-wrap; word-break: break-word; border: 1px solid #e5e7eb; border-radius: 8px; background: #f8fafc; }
+  .assertion-table td { vertical-align: top; }
+  .assertion-value { max-width: 360px; white-space: pre-wrap; word-break: break-word; }
+</style>
+{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1 class="h4 mb-1">数据工厂执行详情</h1>
+      <div id="runSubtitle" class="text-secondary small">正在加载...</div>
+    </div>
+    <div>
+      <button id="cancelButton" class="btn btn-outline-danger me-2" style="display:none;">取消执行</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('data_factories.index') }}">返回列表</a>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md"><div class="metric-card"><div class="metric-label">状态</div><div id="runStatus" class="metric-value fs-5">-</div></div></div>
+    <div class="col-md"><div class="metric-card"><div class="metric-label">执行进度</div><div id="runProgress" class="metric-value">0%</div></div></div>
+    <div class="col-md"><div class="metric-card"><div class="metric-label">完成轮次</div><div id="completedIterations" class="metric-value">0</div></div></div>
+    <div class="col-md"><div class="metric-card"><div class="metric-label">成功轮次</div><div id="successIterations" class="metric-value text-success">0</div></div></div>
+    <div class="col-md"><div class="metric-card"><div class="metric-label">失败轮次</div><div id="failedIterations" class="metric-value text-danger">0</div></div></div>
+  </div>
+
+  <div class="panel mb-3">
+    <div class="progress" style="height: 22px;"><div id="progressBar" class="progress-bar progress-bar-striped" style="width:0%">0%</div></div>
+    <div id="runError" class="alert alert-danger mt-3 mb-0" style="display:none;"></div>
+  </div>
+
+  <div id="iterationList"></div>
+  <div id="iterationPagination" class="pagination-bar"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var runId = {{ run_id|tojson }};
+  var iterationPage = {page: 1, page_size: 10};
+  var pollingTimer = null;
+  var activeTabByDetail = {};
+  var collapsedSectionState = {};
+  var finishedStatuses = ['success', 'partial', 'failed', 'cancelled', 'interrupted'];
+  function escapeHtml(value) { return $('<div>').text(value == null ? '' : String(value)).html(); }
+  function statusBadge(status) {
+    var labels = {queued:'等待执行',running:'执行中',success:'成功',partial:'部分成功',failed:'失败',cancelled:'已取消',interrupted:'异常中断',pass:'通过',fail:'失败',error:'错误',skipped:'跳过'};
+    var colors = {queued:'secondary',running:'primary',success:'success',partial:'warning',failed:'danger',cancelled:'secondary',interrupted:'dark',pass:'success',fail:'danger',error:'danger',skipped:'secondary'};
+    return '<span class="badge text-bg-' + (colors[status] || 'secondary') + '">' + escapeHtml(labels[status] || status) + '</span>';
+  }
+  function httpStatusBadge(statusCode) {
+    var code = Number(statusCode);
+    if (!Number.isInteger(code) || code < 100) return '';
+    var color = code >= 200 && code < 300 ? 'success' : (code >= 300 && code < 400 ? 'primary' : 'danger');
+    return '<span class="badge text-bg-' + color + '">HTTP ' + code + '</span>';
+  }
+  function displayValue(value) {
+    if (value === null) return 'null';
+    if (value === undefined || value === '') return '-';
+    if (typeof value === 'object') return JSON.stringify(value, null, 2);
+    return String(value);
+  }
+  function displayBody(value, bodyType) {
+    if (value === null || value === undefined || value === '') return '-';
+    if (typeof value === 'object') return JSON.stringify(value, null, 2);
+    if (bodyType === 'json' || bodyType === 'application/json') {
+      try { return JSON.stringify(JSON.parse(value), null, 2); } catch (error) { return String(value); }
+    }
+    return String(value);
+  }
+  function snapshotSection(title, value, bodyType, sectionKey) {
+    var content = bodyType === undefined ? displayValue(value) : displayBody(value, bodyType);
+    var collapsed = Boolean(collapsedSectionState[sectionKey]);
+    return '<section class="snapshot-section"><button class="snapshot-section-title" data-section-key="' + escapeHtml(sectionKey) + '" type="button"><span>' + escapeHtml(title) + '</span><span class="snapshot-section-arrow">' + (collapsed ? '⌄' : '⌃') + '</span></button><pre class="snapshot-content"' + (collapsed ? ' style="display:none;"' : '') + '>' + escapeHtml(content) + '</pre></section>';
+  }
+
+  function renderRun(run) {
+    $('#runSubtitle').text(run.factory_name + ' · ' + (run.environment_name || '') + ' · 执行记录 #' + run.id);
+    $('#runStatus').html(statusBadge(run.status));
+    $('#runProgress').text(run.progress + '%');
+    $('#completedIterations').text(run.completed_iteration_count + ' / ' + run.loop_count);
+    $('#successIterations').text(run.success_iteration_count);
+    $('#failedIterations').text(run.failed_iteration_count);
+    $('#progressBar').css('width', run.progress + '%').text(run.progress + '%').toggleClass('progress-bar-animated', run.status === 'running');
+    $('#cancelButton').toggle(run.status === 'queued' || run.status === 'running');
+    $('#runError').toggle(Boolean(run.error_message)).text(run.error_message || '');
+    if (finishedStatuses.indexOf(run.status) >= 0 && pollingTimer) { clearInterval(pollingTimer); pollingTimer = null; }
+  }
+
+  function detailCard(detail) {
+    var isWait = detail.step_type === 'wait';
+    var badge = isWait ? '<span class="badge text-bg-warning">等待</span>' : '<span class="badge text-bg-light border text-dark">' + escapeHtml(detail.method) + '</span>';
+    var activePane = activeTabByDetail[detail.id] || 'response';
+    var protocolBadge = isWait ? '' : httpStatusBadge((detail.response_snapshot || {}).status_code);
+    var body = isWait
+      ? '<div class="wait-step-body">已等待 <strong>' + escapeHtml(detail.wait_seconds) + ' 秒</strong>，实际耗时 ' + escapeHtml(detail.time_taken_ms) + ' ms。</div>'
+      : '<div class="run-step-tabs"><button class="run-step-tab' + (activePane === 'request' ? ' active' : '') + '" data-pane="request" type="button">完整请求</button><button class="run-step-tab' + (activePane === 'response' ? ' active' : '') + '" data-pane="response" type="button">完整响应</button><button class="run-step-tab' + (activePane === 'extractors' ? ' active' : '') + '" data-pane="extractors" type="button">响应提取</button><button class="run-step-tab' + (activePane === 'assertions' ? ' active' : '') + '" data-pane="assertions" type="button">断言结果</button></div>' +
+        requestPane(detail.id, detail.request_snapshot || {}, activePane === 'request') + responsePane(detail.id, detail.response_snapshot || {}, activePane === 'response') + extractorPane(detail.extractors_detail || [], activePane === 'extractors') + assertionPane(detail.assertions_detail || [], activePane === 'assertions');
+    return '<div class="run-step" data-detail-id="' + detail.id + '"><div class="run-step-head d-flex justify-content-between align-items-center"><div><strong>' + detail.sort_order + '. ' + escapeHtml(detail.step_name) + '</strong> ' + badge + '<div class="small font-monospace text-break mt-1">' + escapeHtml(detail.url) + '</div></div><div class="d-flex align-items-center gap-2">' + protocolBadge + statusBadge(detail.status) + ' <span class="text-secondary small">' + (detail.time_taken_ms == null ? '-' : detail.time_taken_ms + ' ms') + '</span></div></div>' + (detail.error_message ? '<div class="alert alert-danger rounded-0 py-2 mb-0">' + escapeHtml(detail.error_message) + '</div>' : '') + body + '</div>';
+  }
+  function requestPane(detailId, request, active) {
+    return '<div class="run-step-pane' + (active ? ' active' : '') + '" data-pane="request">' + snapshotSection('Query 参数', request.params || {}, undefined, detailId + ':request:params') + snapshotSection('请求头', request.headers || {}, undefined, detailId + ':request:headers') + snapshotSection('请求体', request.body, request.body_type, detailId + ':request:body') + '</div>';
+  }
+  function responsePane(detailId, response, active) {
+    return '<div class="run-step-pane' + (active ? ' active' : '') + '" data-pane="response">' + snapshotSection('响应头', response.headers || {}, undefined, detailId + ':response:headers') + snapshotSection('响应正文', response.body, response.body_type, detailId + ':response:body') + '</div>';
+  }
+  function extractorPane(items, active) {
+    return '<div class="run-step-pane' + (active ? ' active' : '') + '" data-pane="extractors"><pre class="run-snapshot">' + escapeHtml(displayValue(items)) + '</pre></div>';
+  }
+  function assertionPane(items, active) {
+    if (!items.length) return '<div class="run-step-pane' + (active ? ' active' : '') + ' text-secondary" data-pane="assertions">暂无断言结果</div>';
+    var rows = items.map(function(item) {
+      var result = item.passed ? statusBadge('pass') : statusBadge('fail');
+      var failure = !item.passed && item.message ? '<div class="text-danger small mt-1">' + escapeHtml(item.message) + '</div>' : '';
+      return '<tr><td>' + escapeHtml(item.name || '-') + failure + '</td><td class="assertion-value">' + escapeHtml(displayValue(item.expected)) + '</td><td class="assertion-value">' + escapeHtml(displayValue(item.actual)) + '</td><td>' + result + '</td></tr>';
+    }).join('');
+    return '<div class="run-step-pane' + (active ? ' active' : '') + '" data-pane="assertions"><div class="table-responsive"><table class="table table-sm assertion-table mb-0"><thead><tr><th>断言名称</th><th>期望值</th><th>实际值</th><th>结果</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+  }
+  function iterationCard(item) {
+    return '<div class="panel mb-3"><div class="mb-3"><h2 class="h5 mb-1">第 ' + item.iteration_no + ' 轮 ' + statusBadge(item.status) + '</h2><div class="text-secondary small">' + escapeHtml(item.started_at) + ' - ' + escapeHtml(item.ended_at || '执行中') + '</div></div>' + (item.error_message ? '<div class="alert alert-warning py-2">' + escapeHtml(item.error_message) + '</div>' : '') + (item.details || []).map(detailCard).join('') + '</div>';
+  }
+
+  function loadDetail() {
+    $.ajax({url:'/api/data-factory/run/detail',method:'POST',contentType:'application/json',data:JSON.stringify({run_id:runId,page:iterationPage.page,page_size:iterationPage.page_size})}).done(function(resp){
+      renderRun(resp.data.run);
+      $('#iterationList').html((resp.data.iterations || []).map(iterationCard).join('') || '<div class="panel text-center text-secondary py-5">尚未产生执行轮次</div>');
+      renderPagination('#iterationPagination', resp.pagination, function(page,pageSize){iterationPage={page:page,page_size:pageSize};loadDetail();});
+    });
+  }
+  $('#cancelButton').on('click', function(){
+    AppDialog.confirm({
+      title: '取消数据工厂执行',
+      message: '确认取消本次执行？当前正在执行的请求仍会等待返回或超时。',
+      confirmText: '确认取消',
+      tone: 'warning'
+    }).then(function(confirmed){
+      if(!confirmed)return;
+      $.ajax({url:'/api/data-factory/run/cancel',method:'POST',contentType:'application/json',data:JSON.stringify({run_id:runId})})
+        .done(loadDetail)
+        .fail(function(xhr){AppToast.error((xhr.responseJSON&&xhr.responseJSON.message)||'取消失败');});
+    });
+  });
+  $('#iterationList').on('click', '.run-step-tab', function(){var card=$(this).closest('.run-step');var pane=$(this).data('pane');activeTabByDetail[card.data('detail-id')]=pane;card.find('.run-step-tab').removeClass('active');$(this).addClass('active');card.find('.run-step-pane').removeClass('active').filter('[data-pane="'+pane+'"]').addClass('active');});
+  $('#iterationList').on('click', '.snapshot-section-title', function(){var key=$(this).data('section-key');var section=$(this).closest('.snapshot-section');var willCollapse=!Boolean(collapsedSectionState[key]);collapsedSectionState[key]=willCollapse;section.find('.snapshot-content').first().toggle(!willCollapse);$(this).find('.snapshot-section-arrow').text(willCollapse?'⌄':'⌃');});
+  loadDetail();
+  pollingTimer=setInterval(loadDetail,2000);
+</script>
+{% endblock %}

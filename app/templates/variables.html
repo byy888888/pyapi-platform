@@ -1,0 +1,442 @@
+{% extends "base.html" %}
+
+{% block title %}环境与变量 - 接口自动化测试平台{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1 class="h4 mb-1">环境与变量</h1>
+    </div>
+    <div>
+      <button type="button" class="btn btn-outline-primary me-2" id="newEnvironmentBtn">新增环境</button>
+      <button type="button" class="btn btn-primary" id="newVariableBtn">新增变量</button>
+    </div>
+  </div>
+
+  <ul class="nav nav-tabs mb-3" id="manageTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="env-tab" data-bs-toggle="tab" data-bs-target="#envPane" type="button" role="tab">环境</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="var-tab" data-bs-toggle="tab" data-bs-target="#varPane" type="button" role="tab">变量</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="hook-tab" data-bs-toggle="tab" data-bs-target="#hookPane" type="button" role="tab">钩子函数</button>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+    <div class="tab-pane fade show active" id="envPane" role="tabpanel" aria-labelledby="env-tab">
+      <div class="panel">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr>
+              <th style="width: 80px;">ID</th>
+              <th>环境名称</th>
+              <th style="width: 100px;">环境类型</th>
+              <th>请求基础地址</th>
+              <th>描述</th>
+              <th style="width: 90px;">默认</th>
+              <th style="width: 180px;">更新时间</th>
+              <th style="width: 150px;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="environmentRows"></tbody>
+        </table>
+        <div id="environmentPagination" class="pagination-bar"></div>
+      </div>
+    </div>
+    <div class="tab-pane fade" id="varPane" role="tabpanel" aria-labelledby="var-tab">
+      <div class="panel">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr>
+              <th style="width: 80px;">ID</th>
+              <th>作用域</th>
+              <th>变量名</th>
+              <th>变量值</th>
+              <th style="width: 90px;">状态</th>
+              <th style="width: 150px;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="variableRows"></tbody>
+        </table>
+        <div id="variablePagination" class="pagination-bar"></div>
+      </div>
+    </div>
+    <div class="tab-pane fade" id="hookPane" role="tabpanel" aria-labelledby="hook-tab">
+      <div class="panel">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr>
+              <th style="width: 140px;">函数</th>
+              <th>说明</th>
+              <th>参数</th>
+              <th>用法</th>
+              <th style="width: 210px;">可用位置</th>
+            </tr>
+          </thead>
+          <tbody id="hookRows"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="environmentModal" tabindex="-1" aria-labelledby="environmentModalTitle" aria-hidden="true">
+    <div class="modal-dialog">
+      <form class="modal-content" id="environmentForm">
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="environmentModalTitle">新增环境</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="environmentId">
+          <div class="mb-3">
+            <label class="form-label" for="environmentName">环境名称</label>
+            <input class="form-control" id="environmentName" maxlength="64" placeholder="例如：test、staging、prod" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="environmentType">环境类型</label>
+            <select class="form-select" id="environmentType" required></select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="environmentBaseUrl">请求基础地址</label>
+            <input class="form-control" id="environmentBaseUrl" maxlength="512" placeholder="例如：https://api.example.com">
+            <div class="form-text">接口 URL 填相对路径时，会自动拼接该地址；模板里的 {{ '{{base_url}}' }} 也会使用该地址。</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="environmentDescription">描述</label>
+            <textarea class="form-control" id="environmentDescription" rows="3" placeholder="请输入环境说明"></textarea>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="environmentDefault">
+            <label class="form-check-label" for="environmentDefault">设为默认环境</label>
+          </div>
+          <div class="alert alert-danger mt-3 d-none" id="environmentError"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal fade" id="variableModal" tabindex="-1" aria-labelledby="variableModalTitle" aria-hidden="true">
+    <div class="modal-dialog">
+      <form class="modal-content" id="variableForm">
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="variableModalTitle">新增变量</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="variableId">
+          <div class="mb-3">
+            <label class="form-label" for="variableProject">项目作用域</label>
+            <select class="form-select" id="variableProject">
+              <option value="">全局变量</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="variableKey">变量名</label>
+            <input class="form-control" id="variableKey" maxlength="128" placeholder="例如：token、user_id、tenant_id" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="variableValue">变量值</label>
+            <textarea class="form-control" id="variableValue" rows="3" placeholder="请输入变量值" required></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="variableDescription">描述</label>
+            <textarea class="form-control" id="variableDescription" rows="2" placeholder="请输入变量说明"></textarea>
+          </div>
+          <div class="d-flex gap-4">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="variableSecret">
+              <label class="form-check-label" for="variableSecret">敏感变量</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="variableActive" checked>
+              <label class="form-check-label" for="variableActive">启用</label>
+            </div>
+          </div>
+          <div class="alert alert-danger mt-3 d-none" id="variableError"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var environmentModal = new bootstrap.Modal(document.getElementById('environmentModal'));
+  var variableModal = new bootstrap.Modal(document.getElementById('variableModal'));
+  var environments = [];
+  var variables = [];
+  var hookFunctions = [];
+  var options = {projects: [], environment_types: []};
+  var environmentPage = {page: 1, page_size: 10};
+  var variablePage = {page: 1, page_size: 10};
+
+  function escapeHtml(text) {
+    return $('<div>').text(text || '').html();
+  }
+
+  function loadAll() {
+    $.when(loadOptions(), loadEnvironments(), loadVariables(), loadHookFunctions()).done(function () {
+      renderOptions();
+    });
+  }
+
+  function loadOptions() {
+    return $.ajax({
+      url: '/api/global-variable/options',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({})
+    }).done(function (resp) {
+      options = resp.data || {projects: []};
+    });
+  }
+
+  function loadEnvironments() {
+    return $.ajax({
+      url: '/api/execution-environment/list',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify(environmentPage)
+    }).done(function (resp) {
+      environments = resp.data || [];
+      var rows = environments.map(function (item) {
+        return '<tr>' +
+          '<td>' + item.id + '</td>' +
+          '<td class="fw-semibold">' + escapeHtml(item.name) + '</td>' +
+          '<td>' + environmentTypeBadge(item.environment_type, item.environment_type_name) + '</td>' +
+          '<td class="code-cell">' + escapeHtml(item.base_url) + '</td>' +
+          '<td>' + escapeHtml(item.description) + '</td>' +
+          '<td>' + (item.is_default ? '<span class="badge text-bg-primary">默认</span>' : '') + '</td>' +
+          '<td>' + escapeHtml(item.updated_at) + '</td>' +
+          '<td>' +
+            '<button class="btn btn-sm btn-outline-primary me-2" data-env-action="edit" data-id="' + item.id + '">编辑</button>' +
+            '<button class="btn btn-sm btn-outline-danger" data-env-action="delete" data-id="' + item.id + '">删除</button>' +
+          '</td>' +
+        '</tr>';
+      }).join('');
+      $('#environmentRows').html(rows || '<tr><td colspan="8" class="text-center text-secondary py-4">暂无环境</td></tr>');
+      renderPagination('#environmentPagination', resp.pagination, function (page, pageSize) {
+        environmentPage = {page: page, page_size: pageSize};
+        loadEnvironments();
+      });
+    });
+  }
+
+  function loadVariables() {
+    return $.ajax({
+      url: '/api/global-variable/list',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify(variablePage)
+    }).done(function (resp) {
+      variables = resp.data || [];
+      var rows = variables.map(function (item) {
+        return '<tr>' +
+          '<td>' + item.id + '</td>' +
+          '<td>' + escapeHtml(item.project_name) + '</td>' +
+          '<td class="code-cell">' + escapeHtml(item.var_key) + '</td>' +
+          '<td class="code-cell">' + escapeHtml(item.display_value) + '</td>' +
+          '<td>' + (item.is_active ? '<span class="badge text-bg-success">启用</span>' : '<span class="badge text-bg-secondary">停用</span>') + '</td>' +
+          '<td>' +
+            '<button class="btn btn-sm btn-outline-primary me-2" data-var-action="edit" data-id="' + item.id + '">编辑</button>' +
+            '<button class="btn btn-sm btn-outline-danger" data-var-action="delete" data-id="' + item.id + '">删除</button>' +
+          '</td>' +
+        '</tr>';
+      }).join('');
+      $('#variableRows').html(rows || '<tr><td colspan="6" class="text-center text-secondary py-4">暂无变量</td></tr>');
+      renderPagination('#variablePagination', resp.pagination, function (page, pageSize) {
+        variablePage = {page: page, page_size: pageSize};
+        loadVariables();
+      });
+    });
+  }
+
+  function loadHookFunctions() {
+    return $.ajax({
+      url: '/api/hook-function/list',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({})
+    }).done(function (resp) {
+      hookFunctions = resp.data || [];
+      var rows = hookFunctions.map(function (item) {
+        var params = (item.params || []).map(function (param) {
+          return param.name + ': ' + param.description;
+        }).join(' / ');
+        return '<tr>' +
+          '<td class="fw-semibold">' + escapeHtml(item.name) + '</td>' +
+          '<td>' + escapeHtml(item.description) + '</td>' +
+          '<td class="code-cell">' + escapeHtml(params) + '</td>' +
+          '<td class="code-cell">' + escapeHtml(item.usage) + '</td>' +
+          '<td>' + escapeHtml((item.supported_locations || []).join('、')) + '</td>' +
+        '</tr>';
+      }).join('');
+      $('#hookRows').html(rows || '<tr><td colspan="5" class="text-center text-secondary py-4">暂无钩子函数</td></tr>');
+    });
+  }
+
+  function renderOptions() {
+    var projectOptions = '<option value="">全局变量</option>' + options.projects.map(function (item) {
+      return '<option value="' + item.id + '">' + escapeHtml(item.name) + '</option>';
+    }).join('');
+    $('#variableProject').html(projectOptions);
+    $('#environmentType').html((options.environment_types || []).map(function (item) {
+      return '<option value="' + escapeHtml(item.value) + '">' + escapeHtml(item.name) + '</option>';
+    }).join(''));
+  }
+
+  function environmentTypeBadge(value, name) {
+    var styles = {production: 'text-bg-danger', staging: 'text-bg-warning', testing: 'text-bg-primary', development: 'text-bg-success'};
+    return '<span class="badge ' + (styles[value] || 'text-bg-secondary') + '">' + escapeHtml(name || value || '-') + '</span>';
+  }
+
+  function openEnvironment(item) {
+    $('#environmentError').addClass('d-none').text('');
+    $('#environmentId').val(item ? item.id : '');
+    $('#environmentName').val(item ? item.name : '');
+    $('#environmentType').val(item ? item.environment_type : 'testing');
+    $('#environmentBaseUrl').val(item ? item.base_url : '');
+    $('#environmentDescription').val(item ? item.description : '');
+    $('#environmentDefault').prop('checked', item ? item.is_default : false);
+    $('#environmentModalTitle').text(item ? '编辑环境' : '新增环境');
+    environmentModal.show();
+  }
+
+  function openVariable(item) {
+    renderOptions();
+    $('#variableError').addClass('d-none').text('');
+    $('#variableId').val(item ? item.id : '');
+    $('#variableProject').val(item && item.project_id ? item.project_id : '');
+    $('#variableKey').val(item ? item.var_key : '');
+    $('#variableValue').val(item ? item.var_value : '');
+    $('#variableDescription').val(item ? item.description : '');
+    $('#variableSecret').prop('checked', item ? item.is_secret : false);
+    $('#variableActive').prop('checked', item ? item.is_active : true);
+    $('#variableModalTitle').text(item ? '编辑变量' : '新增变量');
+    variableModal.show();
+  }
+
+  $('#newEnvironmentBtn').on('click', function () { openEnvironment(null); });
+  $('#newVariableBtn').on('click', function () { openVariable(null); });
+
+  $('#environmentRows').on('click', 'button', function () {
+    var id = Number($(this).data('id'));
+    var action = $(this).data('env-action');
+    var item = environments.find(function (row) { return row.id === id; });
+    if (action === 'edit') {
+      openEnvironment(item);
+    }
+    if (action === 'delete') {
+      AppDialog.confirm({
+        title: '删除执行环境',
+        message: '确认删除该环境？删除后无法恢复。',
+        confirmText: '确认删除',
+        tone: 'danger'
+      }).then(function (confirmed) {
+        if (!confirmed) return;
+        $.ajax({
+          url: '/api/execution-environment/delete',
+          method: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({environment_id: id})
+        })
+          .done(loadAll)
+          .fail(function (xhr) { AppToast.error((xhr.responseJSON && xhr.responseJSON.message) || '删除失败'); });
+      });
+    }
+  });
+
+  $('#variableRows').on('click', 'button', function () {
+    var id = Number($(this).data('id'));
+    var action = $(this).data('var-action');
+    var item = variables.find(function (row) { return row.id === id; });
+    if (action === 'edit') {
+      openVariable(item);
+    }
+    if (action === 'delete') {
+      AppDialog.confirm({
+        title: '删除全局变量',
+        message: '确认删除该变量？删除后无法恢复。',
+        confirmText: '确认删除',
+        tone: 'danger'
+      }).then(function (confirmed) {
+        if (!confirmed) return;
+        $.ajax({
+          url: '/api/global-variable/delete',
+          method: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({variable_id: id})
+        })
+          .done(loadVariables)
+          .fail(function (xhr) { AppToast.error((xhr.responseJSON && xhr.responseJSON.message) || '删除失败'); });
+      });
+    }
+  });
+
+  $('#environmentForm').on('submit', function (event) {
+    event.preventDefault();
+    var id = $('#environmentId').val();
+    var payload = {
+      name: $('#environmentName').val(),
+      environment_type: $('#environmentType').val(),
+      base_url: $('#environmentBaseUrl').val(),
+      description: $('#environmentDescription').val(),
+      is_default: $('#environmentDefault').is(':checked')
+    };
+    if (id) {
+      payload.environment_id = Number(id);
+    }
+    $.ajax({
+      url: id ? '/api/execution-environment/save' : '/api/execution-environment/create',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify(payload)
+    }).done(function () {
+      environmentModal.hide();
+      loadAll();
+    }).fail(function (xhr) {
+      $('#environmentError').removeClass('d-none').text((xhr.responseJSON && xhr.responseJSON.message) || '保存失败');
+    });
+  });
+
+  $('#variableForm').on('submit', function (event) {
+    event.preventDefault();
+    var id = $('#variableId').val();
+    var payload = {
+      project_id: $('#variableProject').val() || null,
+      var_key: $('#variableKey').val(),
+      var_value: $('#variableValue').val(),
+      description: $('#variableDescription').val(),
+      is_secret: $('#variableSecret').is(':checked'),
+      is_active: $('#variableActive').is(':checked')
+    };
+    if (id) {
+      payload.variable_id = Number(id);
+    }
+    $.ajax({
+      url: id ? '/api/global-variable/save' : '/api/global-variable/create',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify(payload)
+    }).done(function () {
+      variableModal.hide();
+      loadVariables();
+    }).fail(function (xhr) {
+      $('#variableError').removeClass('d-none').text((xhr.responseJSON && xhr.responseJSON.message) || '保存失败');
+    });
+  });
+
+  loadAll();
+</script>
+{% endblock %}

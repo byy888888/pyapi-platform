@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+
+{% block title %}项目管理 - 接口自动化测试平台{% endblock %}
+
+{% block head %}
+<style>
+  .project-modal-content { border: 0; border-radius: 18px; overflow: hidden; box-shadow: 0 24px 70px rgba(15, 23, 42, .18); }
+  .project-modal-header { padding: 22px 26px; border-bottom: 1px solid #eef2f7; background: linear-gradient(135deg, #f8fbff 0%, #ffffff 70%); }
+  .project-modal-body { padding: 24px 26px; background: #f8fafc; }
+  .project-form-section { padding: 20px; border: 1px solid #e7edf5; border-radius: 14px; background: #fff; }
+  .project-form-section + .project-form-section { margin-top: 16px; }
+  .section-caption { color: #64748b; font-size: 13px; }
+  .module-editor-list { display: grid; gap: 10px; }
+  .module-editor-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 38px; align-items: center; gap: 10px; }
+  .module-count { min-width: 78px; color: #64748b; font-size: 13px; text-align: right; }
+  .module-icon-btn { width: 36px; height: 36px; padding: 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 22px; line-height: 1; }
+  .deleted-module-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .deleted-module-chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid #fed7aa; border-radius: 999px; background: #fff7ed; color: #9a3412; font-size: 13px; }
+  .detail-body { padding: 24px 26px; background: #f8fafc; }
+  .detail-stat-label { color: #64748b; font-size: 13px; }
+  .detail-field-value { margin-top: 5px; color: #0f172a; font-weight: 500; line-height: 1.6; }
+  .detail-description-value { min-height: 48px; white-space: pre-wrap; }
+  .detail-module-list { display: grid; gap: 10px; max-height: 320px; overflow: auto; }
+  .detail-module-item { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 15px; border: 1px solid #e7edf5; border-radius: 10px; background: #fff; }
+  .detail-summary { display: inline-flex; align-items: center; gap: 6px; color: #64748b; font-size: 13px; }
+  .detail-summary strong { color: #334155; font-weight: 600; }
+  .empty-modules { padding: 34px; border: 1px dashed #cbd5e1; border-radius: 14px; color: #94a3b8; text-align: center; background: #fff; }
+</style>
+{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1 class="h4 mb-1">项目管理</h1>
+    </div>
+    <button type="button" class="btn btn-primary" id="newProjectBtn">新增项目</button>
+  </div>
+
+  <div class="panel">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th style="width: 80px;">ID</th>
+          <th>项目名称</th>
+          <th>描述</th>
+          <th style="width: 90px;">状态</th>
+          <th style="width: 180px;">更新时间</th>
+          <th style="width: 220px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="projectRows"></tbody>
+    </table>
+    <div id="projectPagination" class="pagination-bar"></div>
+  </div>
+
+  <div class="modal fade" id="projectModal" tabindex="-1" aria-labelledby="projectModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <form class="modal-content project-modal-content" id="projectForm">
+        <div class="modal-header project-modal-header">
+          <div><h2 class="modal-title h5 mb-1" id="projectModalTitle">新增项目</h2><div class="section-caption">维护项目基础信息和一级接口模块</div></div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+        </div>
+        <div class="modal-body project-modal-body">
+          <input type="hidden" id="projectId">
+          <div class="project-form-section">
+            <div class="d-flex justify-content-between align-items-center mb-3"><div><h3 class="h6 mb-1">基础信息</h3><div class="section-caption">用于识别和描述当前项目</div></div><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="projectActive" checked><label class="form-check-label" for="projectActive">启用</label></div></div>
+            <div class="mb-3"><label class="form-label" for="projectName">项目名称</label><input class="form-control" id="projectName" maxlength="128" placeholder="例如：会员中心接口测试" required></div>
+            <div><label class="form-label" for="projectDescription">项目描述</label><textarea class="form-control" id="projectDescription" rows="3" placeholder="请输入项目说明"></textarea></div>
+          </div>
+          <div class="project-form-section" id="moduleManager">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <div><h3 class="h6 mb-1">项目模块</h3><div class="section-caption">模块修改将在保存项目时统一生效</div></div>
+              <button type="button" class="btn btn-primary module-icon-btn" id="addModuleBtn" title="新增模块" aria-label="新增模块">+</button>
+            </div>
+            <div class="module-editor-list" id="moduleRows"></div>
+            <div class="small text-secondary py-2" id="moduleEmpty">暂无模块，点击右上角“+”添加</div>
+            <div class="mt-3 d-none" id="deletedModuleArea"><div class="section-caption mb-2">待删除模块（保存后生效）</div><div class="deleted-module-list" id="deletedModuleRows"></div></div>
+          </div>
+          <div class="alert alert-danger mt-3 d-none" id="projectError"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal fade" id="projectDetailModal" tabindex="-1" aria-labelledby="projectDetailTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content project-modal-content">
+      <div class="modal-header project-modal-header">
+        <div><h2 class="modal-title h5 mb-1" id="projectDetailTitle">项目详情</h2><div class="section-caption" id="projectDetailSubtitle">查看项目基础信息和模块数据</div></div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+      </div>
+      <div class="detail-body" id="projectDetailBody"></div>
+    </div></div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var projectModal = new bootstrap.Modal(document.getElementById('projectModal'));
+  var projectDetailModal = new bootstrap.Modal(document.getElementById('projectDetailModal'));
+  var projects = [];
+  var projectPage = {page: 1, page_size: 10};
+  var editingModules = [];
+  var nextModuleKey = 1;
+
+  function escapeHtml(text) {
+    return $('<div>').text(text || '').html();
+  }
+
+  function showError(message) {
+    $('#projectError').removeClass('d-none').text(message || '操作失败');
+  }
+
+  function loadProjects() {
+    $.ajax({
+      url: '/api/project/list',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify(projectPage)
+    }).done(function (resp) {
+      projects = resp.data || [];
+      var rows = projects.map(function (item) {
+        return '<tr>' +
+          '<td>' + item.id + '</td>' +
+          '<td class="fw-semibold">' + escapeHtml(item.name) + '</td>' +
+          '<td>' + escapeHtml(item.description) + '</td>' +
+          '<td>' + (item.is_active ? '<span class="badge text-bg-success">启用</span>' : '<span class="badge text-bg-secondary">停用</span>') + '</td>' +
+          '<td>' + escapeHtml(item.updated_at) + '</td>' +
+          '<td>' +
+            '<button class="btn btn-sm btn-outline-secondary me-1" data-action="view" data-id="' + item.id + '">查看</button>' +
+            '<button class="btn btn-sm btn-outline-primary me-1" data-action="edit" data-id="' + item.id + '">编辑</button>' +
+            '<button class="btn btn-sm btn-outline-danger" data-action="delete" data-id="' + item.id + '">删除</button>' +
+          '</td>' +
+        '</tr>';
+      }).join('');
+      $('#projectRows').html(rows || '<tr><td colspan="6" class="text-center text-secondary py-4">暂无项目</td></tr>');
+      renderPagination('#projectPagination', resp.pagination, function (page, pageSize) {
+        projectPage = {page: page, page_size: pageSize};
+        loadProjects();
+      });
+    });
+  }
+
+  function openProject(item) {
+    $('#projectError').addClass('d-none').text('');
+    $('#projectId').val(item ? item.id : '');
+    $('#projectName').val(item ? item.name : '');
+    $('#projectDescription').val(item ? item.description : '');
+    $('#projectActive').prop('checked', item ? item.is_active : true);
+    $('#projectModalTitle').text(item ? '编辑项目' : '新增项目');
+    nextModuleKey = 1;
+    editingModules = (item && item.modules ? item.modules : []).map(function (module) {
+      return {
+        clientKey: 'module-' + module.id,
+        id: module.id,
+        name: module.name,
+        interfaceCount: module.interface_count || 0,
+        _delete: false
+      };
+    });
+    renderModuleEditor();
+    projectModal.show();
+  }
+
+  function renderModuleEditor(focusKey) {
+    var activeModules = editingModules.filter(function (item) { return !item._delete; });
+    $('#moduleRows').html(activeModules.map(function (item) {
+      var count = item.id ? '<span class="module-count">' + item.interfaceCount + ' 个接口</span>' : '<span class="module-count">待新增</span>';
+      return '<div class="module-editor-row" data-module-key="' + escapeHtml(item.clientKey) + '">' +
+        '<input class="form-control module-name" maxlength="128" placeholder="请输入模块名称" value="' + escapeHtml(item.name) + '">' +
+        count +
+        '<button type="button" class="btn btn-outline-danger module-icon-btn remove-module" title="移除模块" aria-label="移除模块">&minus;</button></div>';
+    }).join(''));
+    $('#moduleEmpty').toggleClass('d-none', activeModules.length > 0);
+    var deletedModules = editingModules.filter(function (item) { return item._delete; });
+    $('#deletedModuleRows').html(deletedModules.map(function (item) {
+      return '<span class="deleted-module-chip">' + escapeHtml(item.name) + '<button type="button" class="btn btn-sm btn-link text-warning p-0 restore-module" data-module-key="' + escapeHtml(item.clientKey) + '">撤销</button></span>';
+    }).join(''));
+    $('#deletedModuleArea').toggleClass('d-none', deletedModules.length === 0);
+    if (focusKey) {
+      $('#moduleRows [data-module-key="' + focusKey + '"] .module-name').trigger('focus');
+    }
+  }
+
+  function syncModuleNames() {
+    $('#moduleRows [data-module-key]').each(function () {
+      var key = String($(this).data('module-key'));
+      var module = editingModules.find(function (item) { return item.clientKey === key; });
+      if (module) { module.name = $(this).find('.module-name').val(); }
+    });
+  }
+
+  function collectModules() {
+    syncModuleNames();
+    var names = {};
+    var result = [];
+    for (var index = 0; index < editingModules.length; index += 1) {
+      var item = editingModules[index];
+      var name = String(item.name || '').trim();
+      if (!item._delete) {
+        if (!name) { throw new Error('第 ' + (index + 1) + ' 个模块名称不能为空'); }
+        var normalizedName = name.toLowerCase();
+        if (names[normalizedName]) { throw new Error('模块名称不能重复：' + name); }
+        names[normalizedName] = true;
+      }
+      result.push({id: item.id || null, name: name, _delete: item._delete === true});
+    }
+    return result;
+  }
+
+  function viewProject(item) {
+    var modules = item.modules || [];
+    var interfaceTotal = modules.reduce(function (total, module) { return total + Number(module.interface_count || 0); }, 0);
+    var moduleRows = modules.map(function (module) {
+      return '<div class="detail-module-item"><div><div class="fw-semibold">' + escapeHtml(module.name) + '</div><div class="small text-secondary mt-1">更新时间：' + escapeHtml(module.updated_at) + '</div></div><span class="badge rounded-pill text-bg-light border">' + module.interface_count + ' 个接口</span></div>';
+    }).join('');
+    $('#projectDetailSubtitle').text(item.name || '查看项目基础信息和模块数据');
+    $('#projectDetailBody').html(
+      '<div class="project-form-section"><div class="mb-3"><h3 class="h6 mb-1">基础信息</h3><div class="section-caption">项目名称、描述及维护时间</div></div>' +
+      '<div class="row g-4"><div class="col-md-6"><div class="detail-stat-label">项目名称</div><div class="detail-field-value">' + escapeHtml(item.name) + '</div></div>' +
+      '<div class="col-md-6"><div class="detail-stat-label">项目描述</div><div class="detail-field-value detail-description-value">' + escapeHtml(item.description || '暂无项目描述') + '</div></div>' +
+      '<div class="col-md-6"><div class="detail-stat-label">创建时间</div><div class="detail-field-value">' + escapeHtml(item.created_at) + '</div></div>' +
+      '<div class="col-md-6"><div class="detail-stat-label">更新时间</div><div class="detail-field-value">' + escapeHtml(item.updated_at) + '</div></div></div></div>' +
+      '<div class="project-form-section"><div class="d-flex justify-content-between align-items-center mb-3"><div><h3 class="h6 mb-1">项目模块</h3><div class="section-caption">模块更新时间和关联接口数量</div></div>' +
+      '<div class="detail-summary"><strong>' + modules.length + '</strong> 个模块 <span>·</span> <strong>' + interfaceTotal + '</strong> 个接口</div></div>' +
+      '<div class="detail-module-list">' + (moduleRows || '<div class="empty-modules">当前项目暂无模块</div>') + '</div></div>'
+    );
+    projectDetailModal.show();
+  }
+
+  $('#newProjectBtn').on('click', function () {
+    openProject(null);
+  });
+
+  $('#projectRows').on('click', 'button', function () {
+    var id = Number($(this).data('id'));
+    var action = $(this).data('action');
+    var item = projects.find(function (row) { return row.id === id; });
+    if (action === 'edit') {
+      openProject(item);
+    }
+    if (action === 'view') { viewProject(item); }
+    if (action === 'delete') {
+      AppDialog.confirm({
+        title: '删除项目',
+        message: '确认删除该项目？删除后无法恢复。',
+        confirmText: '确认删除',
+        tone: 'danger'
+      }).then(function (confirmed) {
+        if (!confirmed) return;
+        $.ajax({
+          url: '/api/project/delete',
+          method: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({project_id: id})
+        })
+          .done(loadProjects)
+          .fail(function (xhr) { AppToast.error((xhr.responseJSON && xhr.responseJSON.message) || '删除失败'); });
+      });
+    }
+  });
+
+  $('#addModuleBtn').on('click', function () {
+    syncModuleNames();
+    var clientKey = 'new-' + Date.now() + '-' + nextModuleKey;
+    nextModuleKey += 1;
+    editingModules.push({clientKey: clientKey, id: null, name: '', interfaceCount: 0, _delete: false});
+    renderModuleEditor(clientKey);
+  });
+
+  $('#moduleRows').on('input', '.module-name', function () {
+    var key = String($(this).closest('[data-module-key]').data('module-key'));
+    var module = editingModules.find(function (item) { return item.clientKey === key; });
+    if (module) { module.name = $(this).val(); }
+  });
+
+  $('#moduleRows').on('click', '.remove-module', function () {
+    syncModuleNames();
+    var key = String($(this).closest('[data-module-key]').data('module-key'));
+    var module = editingModules.find(function (item) { return item.clientKey === key; });
+    if (!module) { return; }
+    if (module.id) {
+      module._delete = true;
+    } else {
+      editingModules = editingModules.filter(function (item) { return item.clientKey !== key; });
+    }
+    renderModuleEditor();
+  });
+
+  $('#deletedModuleRows').on('click', '.restore-module', function () {
+    var key = String($(this).data('module-key'));
+    var module = editingModules.find(function (item) { return item.clientKey === key; });
+    if (module) { module._delete = false; }
+    renderModuleEditor();
+  });
+
+  $('#projectForm').on('submit', function (event) {
+    event.preventDefault();
+    var id = $('#projectId').val();
+    var payload;
+    try {
+      payload = {
+        name: $('#projectName').val(),
+        description: $('#projectDescription').val(),
+        is_active: $('#projectActive').is(':checked'),
+        modules: collectModules()
+      };
+    } catch (error) {
+      showError(error.message);
+      return;
+    }
+    if (id) {
+      payload.project_id = Number(id);
+    }
+    $.ajax({
+      url: id ? '/api/project/save' : '/api/project/create',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify(payload)
+    }).done(function () {
+      projectModal.hide();
+      loadProjects();
+    }).fail(function (xhr) {
+      showError((xhr.responseJSON && xhr.responseJSON.message) || '保存失败');
+    });
+  });
+
+  loadProjects();
+</script>
+{% endblock %}

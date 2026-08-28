@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}历史报告 - 接口自动化测试平台{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1 class="h4 mb-1">历史报告</h1>
+      <p class="text-secondary mb-0">查看手动执行和定时任务执行生成的历史记录。</p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th style="width: 80px;">ID</th>
+          <th>名称</th>
+          <th style="width: 100px;">触发</th>
+          <th style="width: 100px;">状态</th>
+          <th style="width: 80px;">总数</th>
+          <th style="width: 80px;">成功</th>
+          <th style="width: 80px;">失败</th>
+          <th style="width: 80px;">错误</th>
+          <th style="width: 170px;">开始时间</th>
+          <th style="width: 110px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="reportRows"></tbody>
+    </table>
+    <div id="reportPagination" class="pagination-bar"></div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var reportPage = {page: 1, page_size: 10};
+
+  function escapeHtml(text) {
+    return $('<div>').text(text || '').html();
+  }
+
+  function statusBadge(status) {
+    if (status === 'finished') {
+      return '<span class="badge text-bg-success">finished</span>';
+    }
+    if (status === 'failed') {
+      return '<span class="badge text-bg-danger">failed</span>';
+    }
+    return '<span class="badge text-bg-secondary">' + escapeHtml(status) + '</span>';
+  }
+
+  function loadReports() {
+    $.ajax({
+      url: '/api/execution-report/list',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify(reportPage)
+    }).done(function (resp) {
+      var histories = resp.data || [];
+      var rows = histories.map(function (history) {
+        return '<tr>' +
+          '<td>' + history.id + '</td>' +
+          '<td class="fw-semibold">' + escapeHtml(history.task_name || '手动执行') + '</td>' +
+          '<td>' + escapeHtml(history.trigger_type) + '</td>' +
+          '<td>' + statusBadge(history.status) + '</td>' +
+          '<td>' + history.total_count + '</td>' +
+          '<td>' + history.success_count + '</td>' +
+          '<td>' + history.fail_count + '</td>' +
+          '<td>' + history.error_count + '</td>' +
+          '<td>' + escapeHtml(history.start_time) + '</td>' +
+          '<td><a class="btn btn-sm btn-outline-primary" href="/reports/' + history.id + '">查看</a></td>' +
+        '</tr>';
+      }).join('');
+      $('#reportRows').html(rows || '<tr><td colspan="10" class="text-center text-secondary py-4">暂无报告</td></tr>');
+      renderPagination('#reportPagination', resp.pagination, function (page, pageSize) {
+        reportPage = {page: page, page_size: pageSize};
+        loadReports();
+      });
+    });
+  }
+
+  loadReports();
+</script>
+{% endblock %}

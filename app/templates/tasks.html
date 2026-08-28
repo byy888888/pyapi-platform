@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+
+{% block title %}定时任务 - 接口自动化测试平台{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1 class="h4 mb-1">定时任务</h1>
+    </div>
+    <button type="button" class="btn btn-primary" id="newTaskBtn">新增任务</button>
+  </div>
+
+  <div class="alert d-none" id="schedulerStatus"></div>
+
+  <div class="panel mb-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label mb-1" for="taskKeyword">任务名称</label>
+        <input class="form-control" id="taskKeyword" maxlength="128" placeholder="输入任务名称搜索">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label mb-1" for="taskEnvironmentTypeFilter">环境类型</label>
+        <select class="form-select" id="taskEnvironmentTypeFilter"><option value="">全部环境类型</option></select>
+      </div>
+      <div class="col-md-2">
+        <button type="button" class="btn btn-outline-primary w-100" id="taskSearchBtn">搜索</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th style="width:70px;">ID</th>
+          <th>任务名称</th>
+          <th>所属环境</th>
+          <th>计划</th>
+          <th>集合</th>
+          <th>通知</th>
+          <th style="width:90px;">状态</th>
+          <th style="width:160px;">下次执行</th>
+          <th style="width:190px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="taskRows"></tbody>
+    </table>
+    <div id="taskPagination" class="pagination-bar"></div>
+  </div>
+
+  <div class="modal fade" id="taskModal" tabindex="-1" aria-labelledby="taskModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <form class="modal-content" id="taskForm">
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="taskModalTitle">新增任务</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="taskId">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label" for="taskName">任务名称</label>
+              <input class="form-control" id="taskName" maxlength="128" placeholder="例如：每日冒烟测试" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="taskEnvironmentType">所属环境类型</label>
+              <select class="form-select" id="taskEnvironmentType" required></select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="scheduleType">计划类型</label>
+              <select class="form-select" id="scheduleType">
+                <option value="interval">interval</option>
+                <option value="daily">daily</option>
+                <option value="cron">cron</option>
+              </select>
+            </div>
+            <div class="col-md-4 schedule-interval">
+              <label class="form-label" for="intervalSeconds">间隔秒数</label>
+              <input class="form-control" id="intervalSeconds" type="number" min="1" value="300" placeholder="300">
+            </div>
+            <div class="col-md-4 schedule-daily">
+              <label class="form-label" for="dailyTime">每天时间</label>
+              <input class="form-control" id="dailyTime" placeholder="HH:MM">
+            </div>
+            <div class="col-md-8 schedule-cron">
+              <label class="form-label" for="cronExpression">Cron 表达式</label>
+              <input class="form-control" id="cronExpression" placeholder="*/5 * * * *">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">关联集合</label>
+              <div class="border rounded p-2 overflow-auto" id="suiteCheckList" style="max-height: 220px;"></div>
+              <div class="form-text">仅展示与所属环境类型一致、且已配置执行环境的集合。</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="notificationSelect">关联通知</label>
+              <select class="form-select" id="notificationSelect" size="8" multiple></select>
+            </div>
+            <div class="col-12">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="taskEnabled" checked>
+                <label class="form-check-label" for="taskEnabled">启用并同步 APScheduler</label>
+              </div>
+            </div>
+          </div>
+          <div class="alert alert-danger mt-3 d-none" id="taskError"></div>
+          <div class="alert alert-info mt-3 d-none" id="taskRunResult"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var taskModal = new bootstrap.Modal(document.getElementById('taskModal'));
+  var tasks = [];
+  var options = {environment_types: [], suites: [], notifications: []};
+  var schedulerStatus = {enabled_config: false, running: false, job_count: 0};
+  var taskPage = {page: 1, page_size: 10};
+
+  function escapeHtml(text) {
+    return $('<div>').text(text || '').html();
+  }
+
+  function toggleScheduleFields() {
+    var type = $('#scheduleType').val();
+    $('.schedule-interval').toggle(type === 'interval');
+    $('.schedule-daily').toggle(type === 'daily');
+    $('.schedule-cron').toggle(type === 'cron');
+  }
+
+  function environmentTypeBadge(value, name) {
+    var styles = {production: 'text-bg-danger', staging: 'text-bg-warning', testing: 'text-bg-primary', development: 'text-bg-success'};
+    return '<span class="badge ' + (styles[value] || 'text-bg-secondary') + '">' + escapeHtml(name || value || '-') + '</span>';
+  }
+
+  function loadOptions() {
+    return $.ajax({
+      url: '/api/scheduled-task/options',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({})
+    }).done(function (resp) {
+      options = resp.data || {environment_types: [], suites: [], notifications: []};
+      var typeOptions = options.environment_types.map(function (item) {
+        return '<option value="' + item.value + '">' + escapeHtml(item.name) + '</option>';
+      }).join('');
+      $('#taskEnvironmentType').html(typeOptions);
+      $('#taskEnvironmentTypeFilter').html('<option value="">全部环境类型</option>' + typeOptions);
+      $('#notificationSelect').html(options.notifications.map(function (item) {
+        return '<option value="' + item.id + '">' + escapeHtml(item.name + ' [' + item.notification_type + ']') + '</option>';
+      }).join(''));
+    });
+  }
+
+  function renderSuiteCheckList(selectedIds) {
+    var selected = (selectedIds || []).map(Number);
+    var type = $('#taskEnvironmentType').val();
+    var rows = options.suites.filter(function (item) {
+      return item.environment_type === type;
+    }).map(function (item) {
+      var checked = selected.indexOf(Number(item.id)) >= 0 ? ' checked' : '';
+      var label = item.project_name + ' / ' + item.name + '（' + item.environment_name + '）';
+      return '<div class="form-check mb-2"><input class="form-check-input suite-check" type="checkbox" value="' + item.id + '" id="suiteCheck' + item.id + '"' + checked + '>' +
+        '<label class="form-check-label" for="suiteCheck' + item.id + '">' + escapeHtml(label) + '</label></div>';
+    }).join('');
+    $('#suiteCheckList').html(rows || '<div class="text-secondary small">当前环境类型下暂无可关联集合</div>');
+  }
+
+  function loadSchedulerStatus() {
+    return $.ajax({
+      url: '/api/scheduler/status',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({})
+    }).done(function (resp) {
+      schedulerStatus = resp.data || {};
+      renderSchedulerStatus();
+    });
+  }
+
+  function renderSchedulerStatus() {
+    var $status = $('#schedulerStatus');
+    if (schedulerStatus.running) {
+      $status
+        .removeClass('d-none alert-warning alert-danger')
+        .addClass('alert-success')
+        .text('APScheduler 已运行，当前已注册 ' + (schedulerStatus.job_count || 0) + ' 个定时任务。');
+      return;
+    }
+
+    var message = schedulerStatus.enabled_config
+      ? 'APScheduler 尚未运行：任务可以保存和手动运行，但不会自动定时触发。请重启应用或检查启动日志。'
+      : 'APScheduler 已被启动配置关闭：任务可以保存和手动运行，但不会自动定时触发。请用 ENABLE_SCHEDULER=true 重新启动应用。';
+    $status
+      .removeClass('d-none alert-success alert-danger')
+      .addClass('alert-warning')
+      .text(message);
+  }
+
+  function loadTasks() {
+    $.ajax({
+      url: '/api/scheduled-task/list',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify(Object.assign({}, taskPage, {
+        keyword: $('#taskKeyword').val(),
+        environment_type: $('#taskEnvironmentTypeFilter').val()
+      }))
+    }).done(function (resp) {
+      tasks = resp.data || [];
+      var rows = tasks.map(function (item) {
+        var schedule = item.schedule_type === 'interval' ? ('每 ' + item.interval_seconds + ' 秒') : (item.schedule_type === 'daily' ? ('每天 ' + item.daily_time) : item.cron_expression);
+        return '<tr>' +
+          '<td>' + item.id + '</td>' +
+          '<td class="fw-semibold">' + escapeHtml(item.name) + '</td>' +
+          '<td>' + environmentTypeBadge(item.environment_type, item.environment_type_name) + '</td>' +
+          '<td>' + escapeHtml(item.schedule_type + ' / ' + schedule) + '</td>' +
+          '<td class="code-cell">' + escapeHtml((item.suites || []).map(function (x) { return x.name; }).join(' / ')) + '</td>' +
+          '<td class="code-cell">' + escapeHtml((item.notifications || []).map(function (x) { return x.name; }).join(' / ')) + '</td>' +
+          '<td>' + (item.enabled ? '<span class="badge text-bg-success">启用</span>' : '<span class="badge text-bg-secondary">停用</span>') + '</td>' +
+          '<td>' + escapeHtml(item.next_run_at) + '</td>' +
+          '<td><button class="btn btn-sm btn-outline-primary me-1" data-action="edit" data-id="' + item.id + '">编辑</button><button class="btn btn-sm btn-outline-success me-1" data-action="run" data-id="' + item.id + '">运行</button><button class="btn btn-sm btn-outline-danger" data-action="delete" data-id="' + item.id + '">删除</button></td>' +
+        '</tr>';
+      }).join('');
+      $('#taskRows').html(rows || '<tr><td colspan="9" class="text-center text-secondary py-4">暂无任务</td></tr>');
+      renderPagination('#taskPagination', resp.pagination, function (page, pageSize) {
+        taskPage = {page: page, page_size: pageSize};
+        loadTasks();
+      });
+    });
+  }
+
+  function openTask(item) {
+    $('#taskError').addClass('d-none').text('');
+    $('#taskRunResult').addClass('d-none').text('');
+    $('#taskId').val(item ? item.id : '');
+    $('#taskName').val(item ? item.name : '');
+    $('#taskEnvironmentType').val(item ? item.environment_type : 'testing');
+    $('#scheduleType').val(item ? item.schedule_type : 'interval');
+    $('#intervalSeconds').val(item ? item.interval_seconds : 300);
+    $('#dailyTime').val(item ? item.daily_time : '');
+    $('#cronExpression').val(item ? item.cron_expression : '');
+    renderSuiteCheckList(item ? item.suite_ids : []);
+    $('#notificationSelect').val(item ? item.notification_ids.map(String) : []);
+    $('#taskEnabled').prop('checked', item ? item.enabled : true);
+    $('#taskModalTitle').text(item ? '编辑任务' : '新增任务');
+    $('#taskRunResult')
+      .toggleClass('d-none', schedulerStatus.running)
+      .text(schedulerStatus.running ? '' : '当前 APScheduler 未运行，保存后不会自动定时触发，只能手动点击“运行”。');
+    toggleScheduleFields();
+    taskModal.show();
+  }
+
+  function collectSelected(selector) {
+    return $(selector).map(function () { return Number($(this).val()); }).get();
+  }
+
+  $('#scheduleType').on('change', toggleScheduleFields);
+  $('#taskEnvironmentType').on('change', function () { renderSuiteCheckList([]); });
+  $('#taskSearchBtn').on('click', function () { taskPage.page = 1; loadTasks(); });
+  $('#taskKeyword').on('keydown', function (event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      $('#taskSearchBtn').click();
+    }
+  });
+  $('#newTaskBtn').on('click', function () { openTask(null); });
+  $('#taskRows').on('click', 'button', function () {
+    var id = Number($(this).data('id'));
+    var action = $(this).data('action');
+    var item = tasks.find(function (row) { return row.id === id; });
+    if (action === 'edit') {
+      openTask(item);
+    }
+    if (action === 'delete') {
+      AppDialog.confirm({
+        title: '删除定时任务',
+        message: '确认删除该任务？删除后将不再自动执行。',
+        confirmText: '确认删除',
+        tone: 'danger'
+      }).then(function (confirmed) {
+        if (!confirmed) return;
+        $.ajax({
+          url: '/api/scheduled-task/delete',
+          method: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({task_id: id})
+        }).done(loadTasks)
+          .fail(function (xhr) { AppToast.error((xhr.responseJSON && xhr.responseJSON.message) || '删除失败'); });
+      });
+    }
+    if (action === 'run') {
+      $.ajax({
+        url: '/api/scheduled-task/execute',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({task_id: id})
+      })
+        .done(function (resp) {
+          AppDialog.alert({
+            title: '任务执行完成',
+            message: '执行总数：' + resp.data.total_count + '\n测试报告：' + ((resp.data.report_links || []).join(', ') || '暂无'),
+            confirmText: '我知道了'
+          });
+          loadTasks();
+        })
+        .fail(function (xhr) { AppToast.error((xhr.responseJSON && xhr.responseJSON.message) || '执行失败'); });
+    }
+  });
+  $('#taskForm').on('submit', function (event) {
+    event.preventDefault();
+    var id = $('#taskId').val();
+    var payload = {
+      name: $('#taskName').val(),
+      environment_type: $('#taskEnvironmentType').val(),
+      schedule_type: $('#scheduleType').val(),
+      interval_seconds: Number($('#intervalSeconds').val()),
+      daily_time: $('#dailyTime').val(),
+      cron_expression: $('#cronExpression').val(),
+      suite_ids: collectSelected('#suiteCheckList .suite-check:checked'),
+      notification_ids: collectSelected('#notificationSelect option:selected'),
+      enabled: $('#taskEnabled').is(':checked')
+    };
+    if (id) {
+      payload.task_id = Number(id);
+    }
+    $.ajax({
+      url: id ? '/api/scheduled-task/save' : '/api/scheduled-task/create',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify(payload)
+    }).done(function () {
+      taskModal.hide();
+      $.when(loadSchedulerStatus()).done(loadTasks);
+    }).fail(function (xhr) {
+      $('#taskError').removeClass('d-none').text((xhr.responseJSON && xhr.responseJSON.message) || '保存失败');
+    });
+  });
+
+  $.when(loadOptions(), loadSchedulerStatus()).done(loadTasks);
+</script>
+{% endblock %}

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}集合管理 - 接口自动化测试平台{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1 class="h4 mb-1">集合管理</h1>
+    </div>
+    <a class="btn btn-primary" href="{{ url_for('suites.new_suite') }}">新增集合</a>
+  </div>
+
+  <div class="panel">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th style="width: 70px;">ID</th>
+          <th>项目</th>
+          <th>集合名称</th>
+          <th>所属环境</th>
+          <th style="width: 110px;">类型</th>
+          <th>用例</th>
+          <th style="width: 90px;">状态</th>
+          <th style="width: 180px;">更新时间</th>
+          <th style="width: 160px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="suiteRows"></tbody>
+    </table>
+    <div id="suitePagination" class="pagination-bar"></div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var suitePage = {page: 1, page_size: 10};
+
+  function escapeHtml(text) {
+    return $('<div>').text(text || '').html();
+  }
+
+  function environmentTypeBadge(item) {
+    if (!item.environment_type_name) {
+      return '-';
+    }
+    var badgeClasses = {
+      production: 'text-bg-danger',
+      staging: 'text-bg-warning',
+      testing: 'text-bg-primary',
+      development: 'text-bg-success'
+    };
+    var badgeClass = badgeClasses[item.environment_type] || 'text-bg-secondary';
+    return '<span class="badge ' + badgeClass + '">' + escapeHtml(item.environment_type_name) + '</span>';
+  }
+
+  function loadSuites() {
+    $.ajax({
+      url: '/api/test-suite/list',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify(suitePage)
+    }).done(function (resp) {
+      var suites = resp.data || [];
+      var rows = suites.map(function (item) {
+        var caseNames = (item.steps || []).map(function (caseItem) {
+          return caseItem.sort_order + '. ' + (caseItem.step_name || caseItem.case_name);
+        }).join(' / ');
+        return '<tr>' +
+          '<td>' + item.id + '</td>' +
+          '<td>' + escapeHtml(item.project_name) + '</td>' +
+          '<td class="fw-semibold">' + escapeHtml(item.name) + '</td>' +
+          '<td>' + environmentTypeBadge(item) + '</td>' +
+          '<td><span class="badge text-bg-info">' + escapeHtml(item.suite_type) + '</span></td>' +
+          '<td class="code-cell">' + escapeHtml(caseNames) + '</td>' +
+          '<td>' + (item.is_active ? '<span class="badge text-bg-success">启用</span>' : '<span class="badge text-bg-secondary">停用</span>') + '</td>' +
+          '<td>' + escapeHtml(item.updated_at) + '</td>' +
+          '<td>' +
+            '<a class="btn btn-sm btn-outline-primary me-2" href="/suites/' + item.id + '/edit">编辑</a>' +
+            '<button class="btn btn-sm btn-outline-danger" data-id="' + item.id + '">删除</button>' +
+          '</td>' +
+        '</tr>';
+      }).join('');
+      $('#suiteRows').html(rows || '<tr><td colspan="9" class="text-center text-secondary py-4">暂无集合</td></tr>');
+      renderPagination('#suitePagination', resp.pagination, function (page, pageSize) {
+        suitePage = {page: page, page_size: pageSize};
+        loadSuites();
+      });
+    });
+  }
+
+  $('#suiteRows').on('click', 'button', function () {
+    var id = $(this).data('id');
+    AppDialog.confirm({
+      title: '删除场景集合',
+      message: '确认删除该集合？删除后无法恢复。',
+      confirmText: '确认删除',
+      tone: 'danger'
+    }).then(function (confirmed) {
+      if (!confirmed) return;
+      $.ajax({
+        url: '/api/test-suite/delete',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({suite_id: Number(id)})
+      })
+        .done(loadSuites)
+        .fail(function (xhr) { AppToast.error((xhr.responseJSON && xhr.responseJSON.message) || '删除失败'); });
+    });
+  });
+
+  loadSuites();
+</script>
+{% endblock %}

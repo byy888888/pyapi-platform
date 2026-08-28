@@ -1,0 +1,407 @@
+{% extends "base.html" %}
+
+{% block title %}用例管理 - 接口自动化测试平台{% endblock %}
+
+{% block head %}
+<script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+<style>
+  .case-view-switch .btn { min-width: 88px; }
+  .case-tree { border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px; overflow: hidden; }
+  .case-tree-group + .case-tree-group { margin-top: 6px; }
+  .case-tree-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    min-height: 34px;
+    padding: 4px 8px;
+    border-radius: 5px;
+  }
+  .case-tree-row:hover { background: #f8fafc; }
+  .case-tree-group-row { min-height: 38px; background: #eef4ff; }
+  .case-tree-group-row:hover { background: #e7efff; }
+  .case-tree-interface-row { padding-left: 30px; }
+  .case-tree-case-row { padding-left: 56px; }
+  .case-tree-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    flex: 0 0 20px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #64748b;
+  }
+  .case-tree-toggle:hover { background: rgba(100, 116, 139, 0.12); color: #334155; }
+  .case-tree-toggle:focus-visible { outline: 2px solid rgba(13, 110, 253, 0.35); outline-offset: 1px; }
+  .case-tree-toggle svg { width: 14px; height: 14px; transition: transform 0.16s ease; }
+  .case-tree-toggle.is-expanded svg { transform: rotate(90deg); }
+  .case-tree-toggle-spacer { width: 20px; flex: 0 0 20px; }
+  .case-tree-node-icon { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 18px; }
+  .case-tree-node-icon svg { width: 16px; height: 16px; stroke-width: 1.8; }
+  .case-tree-group-icon { color: #f59e0b; }
+  .case-tree-interface-icon { color: #3b82f6; }
+  .case-tree-case-icon { color: #64748b; }
+  .case-tree-content { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+  .case-tree-name { color: #1f2937; font-weight: 600; }
+  .case-tree-meta { color: #64748b; font-size: 12px; white-space: nowrap; }
+  .case-tree-method { padding: 2px 6px; font-size: 11px; font-weight: 600; }
+  .case-tree-url {
+    max-width: min(36vw, 420px);
+    overflow: hidden;
+    color: #64748b;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .case-tree-actions { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; white-space: nowrap; }
+  .case-tree-actions .btn { padding: 2px 7px; font-size: 12px; }
+  .case-tree-load-more { padding: 5px 8px 5px 101px; }
+  .case-tree-load-more .btn { padding: 2px 8px; font-size: 12px; }
+  .case-tree-state { padding: 8px 12px; color: #64748b; font-size: 13px; }
+  .case-tree-interface-state { padding-left: 58px; }
+  .case-tree-case-state { padding-left: 84px; }
+  @media (max-width: 767.98px) {
+    .case-tree-interface-row { padding-left: 20px; }
+    .case-tree-case-row { padding-left: 34px; }
+    .case-tree-content { gap: 6px; }
+    .case-tree-url { width: 100%; max-width: calc(100vw - 160px); }
+    .case-tree-actions { flex-basis: 100%; margin-left: 45px; }
+    .case-tree-load-more { padding-left: 67px; }
+    .case-tree-interface-state { padding-left: 48px; }
+    .case-tree-case-state { padding-left: 62px; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1 class="h4 mb-1">用例管理</h1>
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      <div class="btn-group case-view-switch" role="group" aria-label="用例展示视图">
+        <button class="btn btn-outline-secondary" id="caseListViewButton" type="button" data-view="list">列表视图</button>
+        <button class="btn btn-outline-secondary" id="caseTreeViewButton" type="button" data-view="tree">分组视图</button>
+      </div>
+      <a class="btn btn-primary" id="newHttpCaseButton" href="/cases/new/http">新增 HTTP 用例</a>
+      <a class="btn btn-outline-primary" id="newWebSocketCaseButton" href="/cases/new/websocket">新增 WebSocket 用例</a>
+    </div>
+  </div>
+
+  <div class="panel mb-3">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label" for="caseProjectFilter">项目</label>
+        <select class="form-select" id="caseProjectFilter"><option value="">全部项目</option></select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="caseModuleFilter">模块</label>
+        <select class="form-select" id="caseModuleFilter" disabled><option value="">请先选择项目</option></select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="caseUrlFilter">URL</label>
+        <input class="form-control" id="caseUrlFilter" placeholder="输入 URL 关键词">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="caseEnvironmentFilter">环境</label>
+        <select class="form-select" id="caseEnvironmentFilter"><option value="">全部环境</option></select>
+      </div>
+      <div class="col-md-3 d-flex gap-2">
+        <button class="btn btn-primary" id="caseSearchButton" type="button">搜索</button>
+        <button class="btn btn-outline-secondary" id="caseResetButton" type="button">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="caseListPanel">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr>
+          <th style="width: 70px;">ID</th><th>项目</th><th>所属模块</th><th>用例名称</th>
+          <th>接口</th><th>URL</th><th>所属环境</th><th style="width: 180px;">更新时间</th>
+          <th style="width: 160px;">操作</th>
+        </tr></thead>
+        <tbody id="caseRows"></tbody>
+      </table>
+    </div>
+    <div id="casePagination" class="pagination-bar"></div>
+  </div>
+
+  <div class="panel d-none" id="caseTreePanel">
+    <div id="caseTree" class="case-tree" role="tree" aria-label="按模块和接口分组的用例"></div>
+    <div id="caseTreePagination" class="pagination-bar"></div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var caseView = 'list';
+  var caseListPage = {page: 1, page_size: 10};
+  var caseTreePage = {page: 1, page_size: 10};
+  var caseOptions = {projects: [], modules: [], environment_types: []};
+  var treeGroups = [];
+  var treeGroupState = {};
+  var listVisibleCount = 0;
+
+  function escapeHtml(text) { return $('<div>').text(text == null ? '' : text).html(); }
+  function escapeAttribute(text) {
+    return escapeHtml(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function environmentTypeBadge(item) {
+    if (!item.environment_type_name) { return '-'; }
+    var classes = {production: 'text-bg-danger', staging: 'text-bg-warning', testing: 'text-bg-primary', development: 'text-bg-success'};
+    return '<span class="badge ' + (classes[item.environment_type] || 'text-bg-secondary') + '">' + escapeHtml(item.environment_type_name) + '</span>';
+  }
+
+  function currentFilters() {
+    return {
+      project_id: $('#caseProjectFilter').val() || null,
+      module_id: $('#caseModuleFilter').val() || null,
+      url: $.trim($('#caseUrlFilter').val()),
+      environment_type: $('#caseEnvironmentFilter').val() || ''
+    };
+  }
+
+  function buildCaseQuery(pageState) { return Object.assign({}, pageState, currentFilters()); }
+
+  function renderModuleOptions(projectId, selectedId) {
+    var $module = $('#caseModuleFilter');
+    if (!projectId) {
+      $module.html('<option value="">请先选择项目</option>').prop('disabled', true);
+      return;
+    }
+    var options = (caseOptions.modules || []).filter(function (item) {
+      return String(item.project_id) === String(projectId);
+    }).map(function (item) {
+      return '<option value="' + item.id + '">' + escapeHtml(item.name) + '</option>';
+    }).join('');
+    $module.html('<option value="">全部模块</option>' + options).prop('disabled', false);
+    if (selectedId) { $module.val(String(selectedId)); }
+  }
+
+  function loadCaseOptions() {
+    return $.ajax({url: '/api/test-case/options', method: 'POST', contentType: 'application/json', data: '{}'}).done(function (resp) {
+      caseOptions = resp.data || caseOptions;
+      $('#caseProjectFilter').html('<option value="">全部项目</option>' + (caseOptions.projects || []).map(function (item) {
+        return '<option value="' + item.id + '">' + escapeHtml(item.name) + '</option>';
+      }).join(''));
+      $('#caseEnvironmentFilter').html('<option value="">全部环境</option>' + (caseOptions.environment_types || []).map(function (item) {
+        return '<option value="' + escapeHtml(item.value) + '">' + escapeHtml(item.label) + '</option>';
+      }).join(''));
+      applyUrlState();
+    });
+  }
+
+  function applyUrlState() {
+    var params = new URLSearchParams(window.location.search);
+    $('#caseProjectFilter').val(params.get('project_id') || '');
+    renderModuleOptions($('#caseProjectFilter').val(), params.get('module_id'));
+    $('#caseUrlFilter').val(params.get('url') || '');
+    $('#caseEnvironmentFilter').val(params.get('environment_type') || '');
+    caseListPage = {page: Number(params.get('list_page')) || 1, page_size: Number(params.get('list_page_size')) || 10};
+    caseTreePage = {page: Number(params.get('tree_page')) || 1, page_size: Number(params.get('tree_page_size')) || 10};
+    var storedView = window.localStorage ? localStorage.getItem('caseManagementView') : '';
+    caseView = params.get('view') === 'tree' || (!params.get('view') && storedView === 'tree') ? 'tree' : 'list';
+  }
+
+  function syncUrlState() {
+    var params = new URLSearchParams();
+    var filters = currentFilters();
+    Object.keys(filters).forEach(function (key) { if (filters[key]) { params.set(key, filters[key]); } });
+    params.set('view', caseView);
+    params.set('list_page', caseListPage.page);
+    params.set('list_page_size', caseListPage.page_size);
+    params.set('tree_page', caseTreePage.page);
+    params.set('tree_page_size', caseTreePage.page_size);
+    window.history.replaceState(null, '', window.location.pathname + '?' + params.toString());
+    $('#newHttpCaseButton').attr('href', '/cases/new/http?return_to=' + encodeURIComponent(currentReturnTo()));
+    $('#newWebSocketCaseButton').attr('href', '/cases/new/websocket?return_to=' + encodeURIComponent(currentReturnTo()));
+  }
+
+  function currentReturnTo() { return window.location.pathname + window.location.search; }
+  function editCaseUrl(caseId) {
+    return '/cases/' + caseId + '/edit?return_to=' + encodeURIComponent(currentReturnTo());
+  }
+
+  function setCaseView(view, shouldLoad) {
+    caseView = view === 'tree' ? 'tree' : 'list';
+    $('#caseListPanel').toggleClass('d-none', caseView !== 'list');
+    $('#caseTreePanel').toggleClass('d-none', caseView !== 'tree');
+    $('.case-view-switch .btn').removeClass('btn-secondary').addClass('btn-outline-secondary').attr('aria-pressed', 'false');
+    $('[data-view="' + caseView + '"]').removeClass('btn-outline-secondary').addClass('btn-secondary').attr('aria-pressed', 'true');
+    if (window.localStorage) { localStorage.setItem('caseManagementView', caseView); }
+    syncUrlState();
+    if (shouldLoad) { loadActiveView(); }
+  }
+
+  function loadActiveView() { return caseView === 'tree' ? loadTreeGroups() : loadCases(); }
+
+  function loadCases() {
+    return $.ajax({url: '/api/test-case/list', method: 'POST', contentType: 'application/json', data: JSON.stringify(buildCaseQuery(caseListPage))}).done(function (resp) {
+      listVisibleCount = (resp.data || []).length;
+      var rows = (resp.data || []).map(function (item) {
+        return '<tr><td>' + item.id + '</td><td>' + escapeHtml(item.project_name) + '</td><td>' + escapeHtml(item.module_name || '-') + '</td>' +
+          '<td class="fw-semibold">' + escapeHtml(item.name) + '</td><td>' + escapeHtml(item.interface_name) + '</td>' +
+          '<td class="text-break">' + escapeHtml(item.url || '-') + '</td><td>' + environmentTypeBadge(item) + '</td>' +
+          '<td>' + escapeHtml(item.updated_at) + '</td><td><a class="btn btn-sm btn-outline-primary me-2" href="' + editCaseUrl(item.id) + '">编辑</a>' +
+          '<button class="btn btn-sm btn-outline-danger" data-action="delete-case" data-case-id="' + item.id + '">删除</button></td></tr>';
+      }).join('');
+      $('#caseRows').html(rows || '<tr><td colspan="9" class="text-center text-secondary py-4">暂无用例</td></tr>');
+      renderPagination('#casePagination', resp.pagination, function (page, pageSize) {
+        caseListPage = {page: page, page_size: pageSize}; syncUrlState(); loadCases();
+      });
+    }).fail(showLoadError);
+  }
+
+  function loadTreeGroups() {
+    treeGroupState = {};
+    return $.ajax({url: '/api/test-case/tree-groups', method: 'POST', contentType: 'application/json', data: JSON.stringify(buildCaseQuery(caseTreePage))}).done(function (resp) {
+      treeGroups = resp.data || [];
+      treeGroups.forEach(function (group) { treeGroupState[group.module_id] = {expanded: false, loaded: false, page: 1, page_size: 20, interfaces: []}; });
+      renderTreeGroups();
+      renderPagination('#caseTreePagination', resp.pagination, function (page, pageSize) {
+        caseTreePage = {page: page, page_size: pageSize}; syncUrlState(); loadTreeGroups();
+      });
+    }).fail(showLoadError);
+  }
+
+  function renderTreeGroups() {
+    var html = treeGroups.map(function (group) {
+      var state = treeGroupState[group.module_id];
+      var title = group.project_name + ' / ' + group.module_name;
+      return '<section class="case-tree-group" data-module-id="' + group.module_id + '" role="treeitem" aria-expanded="' + state.expanded + '">' +
+        '<div class="case-tree-row case-tree-group-row"><button class="case-tree-toggle' + (state.expanded ? ' is-expanded' : '') + '" type="button" data-action="toggle-group" title="展开或折叠模块" aria-label="展开或折叠模块" aria-expanded="' + state.expanded + '"><i data-lucide="chevron-right"></i></button>' +
+        '<span class="case-tree-node-icon case-tree-group-icon" aria-hidden="true"><i data-lucide="folder"></i></span>' +
+        '<div class="case-tree-content"><span class="case-tree-name">' + escapeHtml(title) + '</span><span class="case-tree-meta">' + group.interface_count + ' 个接口 · ' + group.case_count + ' 条用例</span></div></div>' +
+        '<div class="case-tree-group-children' + (state.expanded ? '' : ' d-none') + '" role="group">' + renderTreeInterfaces(group, state) + '</div></section>';
+    }).join('');
+    $('#caseTree').html(html || '<div class="text-center text-secondary py-4">暂无符合条件的用例</div>');
+    if (window.lucide) { window.lucide.createIcons(); }
+  }
+
+  function renderTreeInterfaces(group, state) {
+    if (state.loading) { return '<div class="case-tree-state case-tree-interface-state">正在加载接口...</div>'; }
+    if (state.error) { return '<div class="case-tree-state case-tree-interface-state"><span class="text-danger me-2">接口加载失败</span><button class="btn btn-sm btn-outline-primary" data-action="retry-group">重新加载</button></div>'; }
+    if (!state.loaded) { return ''; }
+    var html = state.interfaces.map(function (item) {
+      var itemState = item.state;
+      return '<div class="case-tree-interface" data-interface-id="' + item.interface_id + '" role="treeitem" aria-expanded="' + itemState.expanded + '">' +
+        '<div class="case-tree-row case-tree-interface-row"><button class="case-tree-toggle' + (itemState.expanded ? ' is-expanded' : '') + '" type="button" data-action="toggle-interface" title="展开或折叠接口" aria-label="展开或折叠接口" aria-expanded="' + itemState.expanded + '"><i data-lucide="chevron-right"></i></button>' +
+        '<span class="case-tree-node-icon case-tree-interface-icon" aria-hidden="true"><i data-lucide="code-2"></i></span>' +
+        '<div class="case-tree-content"><span class="badge text-bg-light border case-tree-method">' + escapeHtml(item.method || '-') + '</span><span class="case-tree-name">' + escapeHtml(item.interface_name) + '</span>' +
+        '<span class="case-tree-url" title="' + escapeAttribute(item.url || '-') + '">' + escapeHtml(item.url || '-') + '</span><span class="case-tree-meta">' + item.case_count + ' 条用例</span></div></div>' +
+        '<div class="case-tree-interface-children' + (itemState.expanded ? '' : ' d-none') + '" role="group">' + renderTreeCases(group, item, itemState) + '</div></div>';
+    }).join('');
+    if (state.has_next) { html += '<div class="case-tree-load-more"><button class="btn btn-sm btn-outline-secondary" data-action="more-interfaces">加载更多接口</button></div>'; }
+    return html || '<div class="case-tree-state case-tree-interface-state">暂无匹配接口</div>';
+  }
+
+  function renderTreeCases(group, item, state) {
+    if (state.loading) { return '<div class="case-tree-state case-tree-case-state">正在加载用例...</div>'; }
+    if (state.error) { return '<div class="case-tree-state case-tree-case-state"><span class="text-danger me-2">用例加载失败</span><button class="btn btn-sm btn-outline-primary" data-action="retry-interface">重新加载</button></div>'; }
+    if (!state.loaded) { return ''; }
+    var html = state.cases.map(function (testCase) {
+      return '<div class="case-tree-row case-tree-case-row" role="treeitem"><span class="case-tree-toggle-spacer" aria-hidden="true"></span>' +
+        '<span class="case-tree-node-icon case-tree-case-icon" aria-hidden="true"><i data-lucide="file-text"></i></span>' +
+        '<div class="case-tree-content"><a class="case-tree-name text-decoration-none" href="' + editCaseUrl(testCase.id) + '">' + escapeHtml(testCase.name) + '</a>' +
+        environmentTypeBadge(testCase) + '<span class="case-tree-meta">更新于 ' + escapeHtml(testCase.updated_at) + '</span>' +
+        '<span class="case-tree-actions"><a class="btn btn-sm btn-outline-primary" href="' + editCaseUrl(testCase.id) + '">编辑</a>' +
+        '<button class="btn btn-sm btn-outline-danger" data-action="delete-case" data-case-id="' + testCase.id + '">删除</button></span></div></div>';
+    }).join('');
+    if (state.has_next) { html += '<div class="case-tree-load-more"><button class="btn btn-sm btn-outline-secondary" data-action="more-cases">加载更多用例</button></div>'; }
+    return html || '<div class="case-tree-state case-tree-case-state">暂无匹配用例</div>';
+  }
+
+  function renderOneTreeGroup(moduleId) {
+    var $old = $('.case-tree-group[data-module-id="' + moduleId + '"]');
+    var scrollTop = window.scrollY;
+    renderTreeGroups();
+    if ($old.length) { window.scrollTo(0, scrollTop); }
+  }
+
+  function loadGroupInterfaces(group, append) {
+    var state = treeGroupState[group.module_id];
+    state.loading = true; state.error = false; renderOneTreeGroup(group.module_id);
+    var requestData = Object.assign({}, currentFilters(), {module_id: group.module_id, page: append ? state.page + 1 : 1, page_size: state.page_size});
+    $.ajax({url: '/api/test-case/tree-interfaces', method: 'POST', contentType: 'application/json', data: JSON.stringify(requestData)}).done(function (resp) {
+      var incoming = (resp.data || []).map(function (item) { item.state = {expanded: false, loaded: false, loading: false, page: 1, page_size: 20, cases: []}; return item; });
+      state.interfaces = append ? state.interfaces.concat(incoming) : incoming;
+      state.page = resp.pagination.page; state.has_next = resp.pagination.has_next; state.loaded = true; state.loading = false;
+      renderOneTreeGroup(group.module_id);
+    }).fail(function () { state.loading = false; state.error = true; renderOneTreeGroup(group.module_id); });
+  }
+
+  function loadInterfaceCases(group, item, append) {
+    var state = item.state;
+    state.loading = true; state.error = false; renderOneTreeGroup(group.module_id);
+    var requestData = Object.assign({}, currentFilters(), {interface_id: item.interface_id, page: append ? state.page + 1 : 1, page_size: state.page_size});
+    $.ajax({url: '/api/test-case/list', method: 'POST', contentType: 'application/json', data: JSON.stringify(requestData)}).done(function (resp) {
+      state.cases = append ? state.cases.concat(resp.data || []) : (resp.data || []);
+      state.page = resp.pagination.page; state.has_next = resp.pagination.has_next; state.loaded = true; state.loading = false;
+      renderOneTreeGroup(group.module_id);
+    }).fail(function () { state.loading = false; state.error = true; renderOneTreeGroup(group.module_id); });
+  }
+
+  function findTreeContext(element) {
+    var moduleId = Number($(element).closest('.case-tree-group').data('module-id'));
+    var interfaceId = Number($(element).closest('.case-tree-interface').data('interface-id'));
+    var group = treeGroups.find(function (entry) { return entry.module_id === moduleId; });
+    var groupState = treeGroupState[moduleId];
+    var item = groupState && groupState.interfaces.find(function (entry) { return entry.interface_id === interfaceId; });
+    return {group: group, groupState: groupState, item: item};
+  }
+
+  $('#caseTree').on('click', 'button', function () {
+    var action = $(this).data('action');
+    var context = findTreeContext(this);
+    if (action === 'toggle-group') {
+      context.groupState.expanded = !context.groupState.expanded;
+      if (context.groupState.expanded && !context.groupState.loaded) { loadGroupInterfaces(context.group, false); } else { renderOneTreeGroup(context.group.module_id); }
+    } else if (action === 'retry-group') { loadGroupInterfaces(context.group, false); }
+    else if (action === 'more-interfaces') { loadGroupInterfaces(context.group, true); }
+    else if (action === 'toggle-interface') {
+      context.item.state.expanded = !context.item.state.expanded;
+      if (context.item.state.expanded && !context.item.state.loaded) { loadInterfaceCases(context.group, context.item, false); } else { renderOneTreeGroup(context.group.module_id); }
+    } else if (action === 'retry-interface') { loadInterfaceCases(context.group, context.item, false); }
+    else if (action === 'more-cases') { loadInterfaceCases(context.group, context.item, true); }
+  });
+
+  function deleteCase(caseId) {
+    AppDialog.confirm({
+      title: '删除接口用例',
+      message: '确认删除该用例？删除后无法恢复。',
+      confirmText: '确认删除',
+      tone: 'danger'
+    }).then(function (confirmed) {
+      if (!confirmed) return;
+      $.ajax({url: '/api/test-case/delete', method: 'POST', contentType: 'application/json', data: JSON.stringify({case_id: Number(caseId)})})
+        .done(function () {
+          if (caseView === 'list' && listVisibleCount === 1 && caseListPage.page > 1) { caseListPage.page -= 1; }
+          syncUrlState();
+          loadActiveView();
+        }).fail(function (xhr) { AppToast.error((xhr.responseJSON && xhr.responseJSON.message) || '删除失败'); });
+    });
+  }
+
+  $('#caseRows, #caseTree').on('click', '[data-action="delete-case"]', function () { deleteCase($(this).data('case-id')); });
+  $('.case-view-switch').on('click', '[data-view]', function () { setCaseView($(this).data('view'), true); });
+  $('#caseProjectFilter').on('change', function () { renderModuleOptions($(this).val()); });
+  $('#caseSearchButton').on('click', function () {
+    caseListPage.page = 1; caseTreePage.page = 1; syncUrlState(); loadActiveView();
+  });
+  $('#caseResetButton').on('click', function () {
+    $('#caseProjectFilter, #caseUrlFilter, #caseEnvironmentFilter').val(''); renderModuleOptions('');
+    caseListPage.page = 1; caseTreePage.page = 1; syncUrlState(); loadActiveView();
+  });
+  $('#caseUrlFilter').on('keydown', function (event) { if (event.key === 'Enter') { event.preventDefault(); $('#caseSearchButton').trigger('click'); } });
+  function showLoadError(xhr) { AppToast.error((xhr.responseJSON && xhr.responseJSON.message) || '加载用例失败'); }
+
+  loadCaseOptions().done(function () { setCaseView(caseView, true); }).fail(showLoadError);
+</script>
+{% endblock %}

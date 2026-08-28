@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}数据工厂 - 接口自动化测试平台{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1 class="h4 mb-1">数据工厂</h1>
+      <div class="text-secondary small">批量或按依赖顺序调用接口构造测试数据</div>
+    </div>
+    <a class="btn btn-primary" href="{{ url_for('data_factories.new_factory') }}">新增数据工厂</a>
+  </div>
+
+  <div class="panel mb-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">所属项目</label>
+        <select id="projectFilter" class="form-select">
+          <option value="">全部</option>
+          <option value="independent">独立工厂</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">工厂名称</label>
+        <input id="keywordFilter" class="form-control" placeholder="输入名称搜索">
+      </div>
+      <div class="col-md-2">
+        <button id="searchButton" class="btn btn-outline-primary w-100">查询</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>工厂名称</th>
+            <th>所属项目</th>
+            <th>描述/备注</th>
+            <th>默认环境</th>
+            <th style="width: 110px;">生成次数</th>
+            <th style="width: 110px;">最近状态</th>
+            <th style="width: 170px;">最近执行</th>
+            <th style="width: 280px;">操作</th>
+          </tr>
+        </thead>
+        <tbody id="factoryRows"></tbody>
+      </table>
+    </div>
+    <div id="factoryPagination" class="pagination-bar"></div>
+  </div>
+
+  <div class="modal fade" id="executeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">执行数据工厂</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="executeFactoryId">
+          <div class="mb-3">
+            <label class="form-label">数据工厂</label>
+            <input id="executeFactoryName" class="form-control" disabled>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">执行环境</label>
+            <select id="executeEnvironment" class="form-select"></select>
+          </div>
+          <div class="row g-3">
+            <div class="col-6">
+              <label class="form-label">生成次数</label>
+              <input id="executeLoopCount" type="number" min="1" max="10000" class="form-control">
+            </div>
+            <div class="col-6">
+              <label class="form-label">并发数</label>
+              <input id="executeConcurrency" type="number" min="1" max="10" class="form-control">
+            </div>
+          </div>
+          <div id="executeEstimate" class="alert alert-info mt-3 mb-0"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button id="confirmExecuteButton" type="button" class="btn btn-primary">确认执行</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="historyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">执行历史</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <table class="table table-hover">
+            <thead><tr><th>ID</th><th>状态</th><th>循环</th><th>成功</th><th>失败</th><th>进度</th><th>开始时间</th><th></th></tr></thead>
+            <tbody id="historyRows"></tbody>
+          </table>
+          <div id="historyPagination" class="pagination-bar"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var factoryPage = {page: 1, page_size: 10};
+  var historyPage = {page: 1, page_size: 10};
+  var currentHistoryFactoryId = null;
+  var factoryMap = {};
+  var environmentOptions = [];
+
+  function escapeHtml(value) { return $('<div>').text(value == null ? '' : String(value)).html(); }
+  function statusBadge(status) {
+    var labels = {queued: '等待执行', running: '执行中', success: '全部成功', partial: '部分成功', failed: '执行失败', cancelled: '已取消', interrupted: '异常中断'};
+    var colors = {queued: 'secondary', running: 'primary', success: 'success', partial: 'warning', failed: 'danger', cancelled: 'secondary', interrupted: 'dark'};
+    return '<span class="badge text-bg-' + (colors[status] || 'secondary') + '">' + escapeHtml(labels[status] || status || '-') + '</span>';
+  }
+
+  function loadOptions() {
+    return $.post({url: '/api/data-factory/options', contentType: 'application/json', data: '{}'}).done(function (resp) {
+      environmentOptions = resp.data.environments || [];
+      var projects = (resp.data.projects || []).map(function (item) { return '<option value="' + item.id + '">' + escapeHtml(item.name) + '</option>'; }).join('');
+      $('#projectFilter').append(projects);
+      $('#executeEnvironment').html(environmentOptions.map(function (item) { return '<option value="' + item.id + '">' + escapeHtml(item.name + (item.base_url ? ' - ' + item.base_url : '')) + '</option>'; }).join(''));
+    });
+  }
+
+  function loadFactories() {
+    var payload = $.extend({}, factoryPage, {project_id: $('#projectFilter').val(), keyword: $('#keywordFilter').val().trim()});
+    $.ajax({url: '/api/data-factory/list', method: 'POST', contentType: 'application/json', data: JSON.stringify(payload)}).done(function (resp) {
+      factoryMap = {};
+      var rows = (resp.data || []).map(function (item) {
+        factoryMap[item.id] = item;
+        var latest = item.latest_run;
+        return '<tr>' +
+          '<td class="fw-semibold">' + escapeHtml(item.name) + '</td>' +
+          '<td>' + escapeHtml(item.project_name || '独立工厂') + '</td>' +
+          '<td class="code-cell" title="' + escapeHtml(item.description) + '">' + escapeHtml(item.description || '-') + '</td>' +
+          '<td>' + escapeHtml(item.environment_name) + '</td>' +
+          '<td>' + item.default_loop_count + '</td>' +
+          '<td>' + statusBadge(latest && latest.status) + '</td>' +
+          '<td>' + escapeHtml(latest ? (latest.started_at || latest.created_at) : '-') + '</td>' +
+          '<td class="text-nowrap">' +
+            '<a class="btn btn-sm btn-outline-primary me-1" href="/data-factories/' + item.id + '/edit">编辑</a>' +
+            '<button class="btn btn-sm btn-success me-1 execute-btn" data-id="' + item.id + '">执行</button>' +
+            '<button class="btn btn-sm btn-outline-secondary me-1 history-btn" data-id="' + item.id + '">历史</button>' +
+            '<button class="btn btn-sm btn-outline-secondary me-1 clone-btn" data-id="' + item.id + '">复制</button>' +
+            '<button class="btn btn-sm btn-outline-danger delete-btn" data-id="' + item.id + '">删除</button>' +
+          '</td></tr>';
+      }).join('');
+      $('#factoryRows').html(rows || '<tr><td colspan="8" class="text-center text-secondary py-4">暂无数据工厂</td></tr>');
+      renderPagination('#factoryPagination', resp.pagination, function (page, pageSize) { factoryPage = {page: page, page_size: pageSize}; loadFactories(); });
+    });
+  }
+
+  function updateEstimate() {
+    var count = Number($('#executeLoopCount').val() || 1);
+    var item = factoryMap[Number($('#executeFactoryId').val())] || {};
+    var requestCount = Number(item.request_step_count || 0);
+    $('#executeEstimate').text('本次将生成 ' + count + ' 轮，每轮包含 ' + Number(item.step_count || 0) + ' 个步骤，预计发起 ' + (count * requestCount) + ' 次请求。');
+  }
+
+  $('#factoryRows').on('click', '.execute-btn', function () {
+    var item = factoryMap[Number($(this).data('id'))];
+    $('#executeFactoryId').val(item.id);
+    $('#executeFactoryName').val(item.name);
+    $('#executeEnvironment').val(String(item.environment_id));
+    $('#executeLoopCount').val(item.default_loop_count);
+    $('#executeConcurrency').val(item.default_concurrency);
+    updateEstimate();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('executeModal')).show();
+  });
+
+  $('#confirmExecuteButton').on('click', function () {
+    var payload = {factory_id: Number($('#executeFactoryId').val()), environment_id: Number($('#executeEnvironment').val()), loop_count: Number($('#executeLoopCount').val()), concurrency: Number($('#executeConcurrency').val())};
+    var button = $(this);
+    var executeModalElement = document.getElementById('executeModal');
+    var executeModal = bootstrap.Modal.getOrCreateInstance(executeModalElement);
+    executeModal.hide();
+    $(executeModalElement).one('hidden.bs.modal', function () {
+      AppDialog.confirm({
+        title: '确认批量造数',
+        message: '造数接口可能产生不可逆数据，确认开始本次执行？',
+        confirmText: '开始执行',
+        tone: 'warning'
+      }).then(function (confirmed) {
+        if (!confirmed) {
+          executeModal.show();
+          return;
+        }
+        button.prop('disabled', true).text('正在提交...');
+        $.ajax({url: '/api/data-factory/execute', method: 'POST', contentType: 'application/json', data: JSON.stringify(payload)})
+          .done(function (resp) { window.location.href = '/data-factories/runs/' + resp.data.run_id; })
+          .fail(function (xhr) {
+            AppToast.error((xhr.responseJSON && xhr.responseJSON.message) || '执行失败');
+            executeModal.show();
+          })
+          .always(function () { button.prop('disabled', false).text('确认执行'); });
+      });
+    });
+  });
+
+  $('#factoryRows').on('click', '.history-btn', function () {
+    currentHistoryFactoryId = Number($(this).data('id'));
+    historyPage = {page: 1, page_size: 10};
+    loadHistory();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('historyModal')).show();
+  });
+
+  function loadHistory() {
+    $.ajax({url: '/api/data-factory/run/list', method: 'POST', contentType: 'application/json', data: JSON.stringify($.extend({}, historyPage, {factory_id: currentHistoryFactoryId}))}).done(function (resp) {
+      var rows = (resp.data || []).map(function (item) {
+        return '<tr><td>' + item.id + '</td><td>' + statusBadge(item.status) + '</td><td>' + item.loop_count + '</td><td>' + item.success_iteration_count + '</td><td>' + item.failed_iteration_count + '</td><td>' + item.progress + '%</td><td>' + escapeHtml(item.started_at || item.created_at) + '</td><td><a class="btn btn-sm btn-outline-primary" href="/data-factories/runs/' + item.id + '">详情</a></td></tr>';
+      }).join('');
+      $('#historyRows').html(rows || '<tr><td colspan="8" class="text-center text-secondary">暂无执行历史</td></tr>');
+      renderPagination('#historyPagination', resp.pagination, function (page, pageSize) { historyPage = {page: page, page_size: pageSize}; loadHistory(); });
+    });
+  }
+
+  $('#factoryRows').on('click', '.clone-btn', function () {
+    $.ajax({url: '/api/data-factory/clone', method: 'POST', contentType: 'application/json', data: JSON.stringify({factory_id: Number($(this).data('id'))})})
+      .done(loadFactories).fail(function (xhr) { AppToast.error((xhr.responseJSON && xhr.responseJSON.message) || '复制失败'); });
+  });
+  $('#factoryRows').on('click', '.delete-btn', function () {
+    var factoryId = Number($(this).data('id'));
+    AppDialog.confirm({
+      title: '删除数据工厂',
+      message: '确认删除该数据工厂？删除后无法恢复。',
+      confirmText: '确认删除',
+      tone: 'danger'
+    }).then(function (confirmed) {
+      if (!confirmed) return;
+      $.ajax({url: '/api/data-factory/delete', method: 'POST', contentType: 'application/json', data: JSON.stringify({factory_id: factoryId})})
+        .done(loadFactories).fail(function (xhr) { AppToast.error((xhr.responseJSON && xhr.responseJSON.message) || '删除失败'); });
+    });
+  });
+  $('#searchButton').on('click', function () { factoryPage.page = 1; loadFactories(); });
+  $('#keywordFilter').on('keydown', function (event) { if (event.key === 'Enter') $('#searchButton').trigger('click'); });
+  $('#executeLoopCount').on('input', updateEstimate);
+  loadOptions().done(loadFactories);
+</script>
+{% endblock %}

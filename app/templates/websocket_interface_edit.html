@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}{{ '编辑 WebSocket 接口' if interface_id else '新增 WebSocket 接口' }} - 接口自动化测试平台{% endblock %}
+
+{% block head %}
+<style>
+  .ws-workbench { border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; overflow: hidden; }
+  .ws-meta { display: grid; grid-template-columns: 1fr 1fr 1.2fr 110px 1.5fr; gap: 10px; padding: 14px; border-bottom: 1px solid #eef2f7; align-items: center; }
+  .ws-connect { display: grid; grid-template-columns: minmax(320px, 1fr) auto auto; gap: 10px; padding: 14px; border-bottom: 1px solid #eef2f7; }
+  .ws-section { padding: 16px; border-bottom: 1px solid #eef2f7; }
+  .ws-message-editor { min-height: 160px; }
+  .ws-log { min-height: 260px; max-height: 440px; overflow: auto; background: #0f172a; color: #dbeafe; }
+  .ws-log-row { display: grid; grid-template-columns: 92px 72px 1fr; gap: 8px; padding: 5px 0; border-bottom: 1px solid rgba(148,163,184,.15); }
+  .ws-log-send { color: #86efac; } .ws-log-receive { color: #93c5fd; } .ws-log-system { color: #fcd34d; }
+  .ws-kv-row { display: grid; grid-template-columns: 1fr 1.4fr auto; gap: 8px; margin-bottom: 8px; }
+  @media (max-width: 1199.98px) { .ws-meta, .ws-connect { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+  <div>
+    <h1 class="h4 mb-1">{{ '编辑 WebSocket 接口' if interface_id else '新增 WebSocket 接口' }}</h1>
+    <div class="text-secondary small">配置长连接、可选握手认证、连接后消息和业务心跳。</div>
+  </div>
+  <div class="d-flex gap-2">
+    {% if interface_id %}
+      <a class="btn btn-outline-primary" href="{{ url_for('cases.new_websocket_case', interface_id=interface_id, return_to=url_for('interfaces.edit_websocket_interface', interface_id=interface_id)) }}">新增 WebSocket 用例</a>
+    {% endif %}
+    <a class="btn btn-outline-secondary" href="{{ url_for('interfaces.index') }}">返回列表</a>
+  </div>
+</div>
+
+<div class="ws-workbench">
+  <input type="hidden" id="interfaceId" value="{{ interface_id }}">
+  <div class="ws-meta">
+    <select class="form-select" id="projectSelect" aria-label="项目"></select>
+    <div><input class="form-control" id="moduleInput" placeholder="搜索或输入新模块" autocomplete="off"></div>
+    <input class="form-control" id="interfaceName" placeholder="接口名称" autocomplete="off">
+    <div class="form-check"><input class="form-check-input" id="interfaceActive" type="checkbox" checked><label class="form-check-label" for="interfaceActive">启用</label></div>
+    <select class="form-select" id="environmentSelect" aria-label="调试环境"></select>
+  </div>
+
+  <div class="ws-connect">
+    <input class="form-control font-monospace" id="requestUrl" placeholder="wss://example.com/ws?token={% raw %}{{token}}{% endraw %}">
+    <button class="btn btn-primary px-4" id="connectButton" type="button">建立连接</button>
+    <button class="btn btn-outline-primary px-4" id="saveButton" type="button">{{ '保存接口' if interface_id else '创建接口' }}</button>
+  </div>
+
+  <div class="ws-section">
+    <button class="btn btn-link text-decoration-none p-0" type="button" data-bs-toggle="collapse" data-bs-target="#advancedConfig">▶ 高级配置（可选）</button>
+    <div class="collapse mt-3" id="advancedConfig">
+      <div class="row g-4">
+        <div class="col-lg-6">
+          <div class="d-flex justify-content-between align-items-center mb-2"><h2 class="h6 mb-0">握手 Headers</h2><button class="btn btn-sm btn-outline-primary" id="addHeaderButton" type="button">添加 Header</button></div>
+          <div class="small text-secondary mb-2">默认不发送自定义 Header，可使用 {% raw %}{{变量}}{% endraw %}。</div>
+          <div id="headerRows"></div>
+        </div>
+        <div class="col-lg-6">
+          <label class="form-label" for="subprotocols">子协议（逗号分隔，可选）</label>
+          <input class="form-control mb-3" id="subprotocols" placeholder="stomp,mqtt">
+          <label class="form-label" for="connectTimeout">连接超时（ms）</label>
+          <input class="form-control" id="connectTimeout" type="number" min="1" value="5000">
+        </div>
+        <div class="col-lg-6">
+          <div class="form-check form-switch mb-2"><input class="form-check-input" id="connectMessageEnabled" type="checkbox"><label class="form-check-label fw-semibold" for="connectMessageEnabled">连接成功后自动发送消息</label></div>
+          <div class="row g-2 connect-message-fields">
+            <div class="col-4"><select class="form-select" id="connectMessageType"><option value="json">JSON</option><option value="text">文本</option><option value="binary">Binary(Base64)</option></select></div>
+            <div class="col-12"><textarea class="form-control font-monospace" id="connectMessageContent" rows="5" placeholder='{"type":"auth","payload":{"token":"{% raw %}{{token}}{% endraw %}"}}'></textarea></div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="form-check form-switch mb-2"><input class="form-check-input" id="heartbeatEnabled" type="checkbox"><label class="form-check-label fw-semibold" for="heartbeatEnabled">启用业务心跳</label></div>
+          <div class="row g-2 heartbeat-fields">
+            <div class="col-4"><select class="form-select" id="heartbeatType"><option value="text">文本</option><option value="json">JSON</option></select></div>
+            <div class="col-8"><input class="form-control" id="heartbeatInterval" type="number" min="1" value="30000" placeholder="间隔 ms"></div>
+            <div class="col-12"><textarea class="form-control font-monospace" id="heartbeatContent" rows="3" placeholder="ping"></textarea></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ws-section">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <div><h2 class="h6 mb-1">默认消息模板</h2><div class="small text-secondary">连接成功后可手动发送；新建用例时作为默认消息参考。</div></div>
+      <div class="d-flex gap-2"><select class="form-select" id="messageType"><option value="json">JSON</option><option value="text">文本</option><option value="binary">Binary(Base64)</option></select><button class="btn btn-outline-secondary" id="formatMessageButton" type="button">格式化</button><button class="btn btn-primary" id="sendButton" type="button" disabled>发送</button></div>
+    </div>
+    <textarea class="form-control font-monospace ws-message-editor" id="messageContent" placeholder='{"action":"subscribe","topic":"order"}'></textarea>
+  </div>
+
+  <div class="ws-section border-0">
+    <div class="d-flex justify-content-between align-items-center mb-2"><h2 class="h6 mb-0">消息日志</h2><span class="badge text-bg-secondary" id="connectionStatus">未连接</span></div>
+    <div class="ws-log rounded p-3 font-monospace small" id="messageLog"><div class="text-secondary">暂无连接日志，点击“建立连接”开始调试。</div></div>
+  </div>
+</div>
+<div class="alert alert-danger mt-3 d-none" id="pageError"></div>
+{% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', filename='js/websocket_interface_edit.js') }}"></script>{% endblock %}

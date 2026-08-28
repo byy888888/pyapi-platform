@@ -1,0 +1,1184 @@
+{% extends "base.html" %}
+
+{% block title %}集合编辑 - 接口自动化测试平台{% endblock %}
+
+{% block head %}
+<style>
+  .execution-detail-item {
+    border: 1px solid #dbe3ef;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 10px;
+    background: #fff;
+  }
+
+  .execution-detail-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .execution-detail-title {
+    min-width: 0;
+  }
+
+  .execution-detail-title .text-truncate {
+    max-width: 100%;
+  }
+
+  .execution-detail-body {
+    border-top: 1px solid #eef2f7;
+    margin-top: 10px;
+    padding-top: 10px;
+  }
+
+  .execution-detail-pre {
+    max-height: 260px;
+    overflow: auto;
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 10px;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .step-workbench {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    overflow: hidden;
+  }
+
+  .step-request-line {
+    display: grid;
+    grid-template-columns: 130px minmax(320px, 1fr) 170px 120px;
+    gap: 10px;
+    padding: 14px;
+    border-bottom: 1px solid #eef2f7;
+  }
+
+  .step-tabs {
+    padding: 0 14px;
+    border-bottom: 1px solid #eef2f7;
+  }
+
+  .step-tabs .nav-link {
+    border: 0;
+    color: #4b5563;
+    padding: 12px 4px;
+    margin-right: 22px;
+  }
+
+  .step-tabs .nav-link.active {
+    color: #0d6efd;
+    border-bottom: 2px solid #0d6efd;
+    font-weight: 700;
+  }
+
+  .step-pane {
+    padding: 16px 18px 20px;
+    min-height: 260px;
+  }
+
+  .step-kv-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+
+  .step-kv-table th,
+  .step-kv-table td {
+    border-bottom: 1px solid #eef2f7;
+    padding: 8px;
+    vertical-align: middle;
+  }
+
+  .step-kv-enabled {
+    width: 46px;
+    text-align: center;
+  }
+
+  .step-kv-action {
+    width: 64px;
+  }
+
+  .step-body-mode {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+
+  .step-body-mode .btn.active {
+    color: #fff;
+    background: #0d6efd;
+    border-color: #0d6efd;
+  }
+
+  @media (max-width: 1199.98px) {
+    .step-request-line {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1 class="h4 mb-1">集合编辑</h1>
+      <p class="text-secondary mb-0">选择用例并排序，手动执行后生成历史与详情。</p>
+    </div>
+    <div>
+      <a class="btn btn-outline-secondary me-2" href="{{ url_for('suites.index') }}">返回列表</a>
+      <button type="button" class="btn btn-outline-primary me-2" id="runSuiteBtn">手动执行</button>
+      <button type="button" class="btn btn-primary" id="saveSuiteBtn">保存集合</button>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <div class="panel mb-3">
+        <h2 class="h5 mb-3">基础信息</h2>
+        <input type="hidden" id="suiteId" value="{{ suite_id }}">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label" for="projectSelect">项目</label>
+            <select class="form-select" id="projectSelect"></select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="suiteType">集合类型</label>
+            <select class="form-select" id="suiteType">
+              <option value="scene">scene</option>
+              <option value="single">single</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="suiteEnvironmentSelect">集合执行环境</label>
+            <select class="form-select" id="suiteEnvironmentSelect" required></select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="suiteName">集合名称</label>
+            <input class="form-control" id="suiteName" maxlength="128" placeholder="例如：登录后查询用户资料" required>
+          </div>
+          <div class="col-md-4 d-flex align-items-end">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="suiteActive" checked>
+              <label class="form-check-label" for="suiteActive">启用</label>
+            </div>
+          </div>
+          <div class="col-12">
+            <label class="form-label" for="suiteDescription">描述</label>
+            <textarea class="form-control" id="suiteDescription" rows="2" placeholder="请输入集合说明"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h2 class="h5 mb-0">选择用例</h2>
+          <button type="button" class="btn btn-sm btn-outline-primary" id="addCaseBtn">添加选中用例</button>
+        </div>
+        <div class="row g-3">
+          <div class="col-md-5">
+            <label class="form-label" for="casePool">可选用例</label>
+            <select class="form-select" id="casePool" size="12"></select>
+          </div>
+          <div class="col-md-7">
+            <label class="form-label">执行顺序</label>
+            <div id="selectedCaseList" class="list-group"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="panel mb-3">
+        <h2 class="h5 mb-3">手动执行</h2>
+        <div class="form-text mb-3">使用基础信息中当前选择的“集合执行环境”；手动执行不会保存集合属性。</div>
+        <div class="row g-2 mb-3">
+          <div class="col-3"><div class="metric-card"><div class="metric-label">总数</div><div class="metric-value" id="runTotal">-</div></div></div>
+          <div class="col-3"><div class="metric-card"><div class="metric-label">成功</div><div class="metric-value" id="runSuccess">-</div></div></div>
+          <div class="col-3"><div class="metric-card"><div class="metric-label">失败</div><div class="metric-value" id="runFail">-</div></div></div>
+          <div class="col-3"><div class="metric-card"><div class="metric-label">错误</div><div class="metric-value" id="runError">-</div></div></div>
+        </div>
+        <div class="small text-secondary" id="runMeta">暂无执行结果</div>
+      </div>
+
+      <div class="panel">
+        <h2 class="h5 mb-3">执行详情</h2>
+        <div id="runDetails" class="small text-secondary">暂无详情</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="alert alert-danger mt-3 d-none" id="suiteError"></div>
+  <div class="alert alert-info mt-3 d-none" id="suiteNotice"></div>
+
+  <div class="modal fade" id="stepConfigModal" tabindex="-1" aria-labelledby="stepConfigModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+      <form class="modal-content" id="stepConfigForm">
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="stepConfigModalTitle">步骤配置</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="editingStepIndex">
+          <div class="row g-3 mb-3">
+            <div class="col-md-8">
+              <label class="form-label" for="stepName">步骤名称</label>
+              <input class="form-control" id="stepName" maxlength="128" placeholder="为空时使用基础用例名称">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label" for="stepTimeout">超时覆盖</label>
+              <input class="form-control" id="stepTimeout" type="number" min="1" placeholder="继承">
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="stepActive" checked>
+                <label class="form-check-label" for="stepActive">启用</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="step-workbench">
+            <div class="step-request-line">
+              <select class="form-select fw-semibold" id="stepMethodSelect" aria-label="请求方法"></select>
+              <input class="form-control font-monospace" id="stepRequestUrl" placeholder="/api/login">
+              <select class="form-select" id="stepBodyTypeSelect" aria-label="Body 类型"></select>
+              <button type="button" class="btn btn-outline-secondary" id="resetStepConfigBtn">恢复继承</button>
+            </div>
+
+            <ul class="nav step-tabs" id="stepConfigTabs" role="tablist">
+              <li class="nav-item" role="presentation">
+                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#stepParamsPane" type="button" role="tab">Params</button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#stepBodyPane" type="button" role="tab">Body</button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#stepHeadersPane" type="button" role="tab">Headers</button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#stepAssertionsPane" type="button" role="tab">断言</button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#stepExtractorsPane" type="button" role="tab">提取器</button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#stepWsPane" type="button" role="tab">WebSocket</button>
+              </li>
+            </ul>
+
+            <div class="tab-content">
+              <div class="tab-pane fade show active step-pane" id="stepParamsPane" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <h3 class="h6 mb-0">Query 参数</h3>
+                  <button type="button" class="btn btn-sm btn-outline-primary" id="addStepParamBtn">添加参数</button>
+                </div>
+                <table class="step-kv-table" id="stepParamsTable">
+                  <thead><tr><th class="step-kv-enabled">启用</th><th>参数名</th><th>参数值</th><th>说明</th><th class="step-kv-action">操作</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div class="tab-pane fade step-pane" id="stepBodyPane" role="tabpanel">
+                <div class="step-body-mode" role="group" aria-label="请求体类型">
+                  <button type="button" class="btn btn-sm btn-outline-secondary step-body-type" data-body-type="none">none</button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary step-body-type" data-body-type="form-data">form-data</button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary step-body-type" data-body-type="x-www-form-urlencoded">x-www-form-urlencoded</button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary step-body-type" data-body-type="json">JSON</button>
+                </div>
+                <div id="stepBodyNone" class="text-secondary py-4">当前请求不发送 Body。</div>
+                <div id="stepBodyKv">
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h3 class="h6 mb-0">Body 参数</h3>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="addStepBodyParamBtn">添加参数</button>
+                  </div>
+                  <table class="step-kv-table" id="stepBodyTable">
+                    <thead><tr><th class="step-kv-enabled">启用</th><th>参数名</th><th>参数值</th><th>说明</th><th class="step-kv-action">操作</th></tr></thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+                <div id="stepBodyJson">
+                  <div class="d-flex justify-content-end mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="beautifyStepJsonBtn">Beautify</button>
+                  </div>
+                  <textarea class="form-control font-monospace" id="stepBodyJsonText" rows="10" placeholder='{"username":"demo"}'></textarea>
+                </div>
+              </div>
+              <div class="tab-pane fade step-pane" id="stepHeadersPane" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <h3 class="h6 mb-0">Headers</h3>
+                  <button type="button" class="btn btn-sm btn-outline-primary" id="addStepHeaderBtn">添加 Header</button>
+                </div>
+                <table class="step-kv-table" id="stepHeadersTable">
+                  <thead><tr><th class="step-kv-enabled">启用</th><th>Key</th><th>Value</th><th>Description</th><th class="step-kv-action">操作</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div class="tab-pane fade step-pane" id="stepAssertionsPane" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <h3 class="h6 mb-0">断言</h3>
+                  <button type="button" class="btn btn-sm btn-outline-primary" id="addStepAssertionBtn">添加断言</button>
+                </div>
+                <div id="stepAssertionList"></div>
+              </div>
+              <div class="tab-pane fade step-pane" id="stepExtractorsPane" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <h3 class="h6 mb-0">提取器</h3>
+                  <button type="button" class="btn btn-sm btn-outline-primary" id="addStepExtractorBtn">添加提取器</button>
+                </div>
+                <div id="stepExtractorList"></div>
+              </div>
+              <div class="tab-pane fade step-pane" id="stepWsPane" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <h3 class="h6 mb-0">WebSocket 步骤</h3>
+                  <button type="button" class="btn btn-sm btn-outline-primary" id="addStepWsBtn">添加步骤</button>
+                </div>
+                <div id="stepWsList"></div>
+              </div>
+            </div>
+          </div>
+          <div class="alert alert-danger mt-3 d-none" id="stepConfigError"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-primary">保存步骤配置</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var suiteOptions = {projects: [], environments: [], cases: []};
+  var suiteSteps = [];
+  var nextStepClientId = 1;
+  var currentStepBodyType = 'none';
+  var stepConfigModal = new bootstrap.Modal(document.getElementById('stepConfigModal'));
+
+  function escapeHtml(text) {
+    return $('<div>').text(text === null || text === undefined ? '' : String(text)).html();
+  }
+
+  function showSuiteError(message) {
+    $('#suiteNotice').addClass('d-none').text('');
+    $('#suiteError').removeClass('d-none').text(message || '操作失败');
+  }
+
+  function clearSuiteError() {
+    $('#suiteError').addClass('d-none').text('');
+    $('#suiteNotice').addClass('d-none').text('');
+  }
+
+  function showSuiteNotice(message) {
+    $('#suiteError').addClass('d-none').text('');
+    $('#suiteNotice').removeClass('d-none').text(message || '操作成功');
+  }
+
+  function loadOptions() {
+    return $.ajax({
+      url: '/api/test-suite/options',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({})
+    }).done(function (resp) {
+      suiteOptions = resp.data || {projects: [], environments: [], cases: []};
+      $('#projectSelect').html(suiteOptions.projects.map(function (item) {
+        return '<option value="' + item.id + '">' + escapeHtml(item.name) + '</option>';
+      }).join(''));
+      var environmentOptions = suiteOptions.environments.map(function (item) {
+        return '<option value="' + item.id + '">' + escapeHtml(item.name + '（' + item.environment_type_name + '）') + '</option>';
+      }).join('');
+      $('#suiteEnvironmentSelect').html(environmentOptions);
+      renderStepMethodOptions();
+      renderStepBodyTypeOptions();
+      renderCasePool();
+    });
+  }
+
+  function renderStepMethodOptions() {
+    var methods = suiteOptions.methods || ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
+    $('#stepMethodSelect').html(methods.filter(function (method) {
+      return method !== 'WS';
+    }).map(function (method) {
+      return '<option value="' + method + '">' + method + '</option>';
+    }).join(''));
+  }
+
+  function renderStepBodyTypeOptions() {
+    var bodyTypes = suiteOptions.body_types || ['none', 'form-data', 'x-www-form-urlencoded', 'json'];
+    $('#stepBodyTypeSelect').html(bodyTypes.map(function (bodyType) {
+      return '<option value="' + bodyType + '">' + bodyType + '</option>';
+    }).join(''));
+  }
+
+  function renderCasePool() {
+    var projectId = Number($('#projectSelect').val());
+    var options = suiteOptions.cases.filter(function (item) {
+      return Number(item.project_id) === projectId;
+    }).map(function (item) {
+      var label = item.name + ' / ' + item.interface_name + ' [' + item.interface_type + ']';
+      return '<option value="' + item.id + '">' + escapeHtml(label) + '</option>';
+    }).join('');
+    $('#casePool').html(options);
+    renderSelectedSteps();
+  }
+
+  function renderSelectedSteps() {
+    var rows = suiteSteps.map(function (step, index) {
+      var item = findCaseOption(step.case_id);
+      var baseLabel = item ? item.name + ' / ' + item.interface_name : step.case_id;
+      var stepName = step.step_name || (item ? item.name : step.case_id);
+      var badge = stepHasOverride(step) ? '<span class="badge text-bg-warning ms-2">已覆盖</span>' : '';
+      var activeBadge = step.is_active === false ? '<span class="badge text-bg-secondary ms-2">停用</span>' : '';
+      return '<div class="list-group-item d-flex justify-content-between align-items-center" data-index="' + index + '">' +
+        '<span class="me-2">' +
+          '<span class="fw-semibold">' + (index + 1) + '. ' + escapeHtml(stepName) + '</span>' +
+          badge + activeBadge +
+          '<div class="small text-secondary">' + escapeHtml(baseLabel) + '</div>' +
+        '</span>' +
+        '<span>' +
+          '<button type="button" class="btn btn-sm btn-outline-primary me-1 config-step">配置</button>' +
+          '<button type="button" class="btn btn-sm btn-outline-secondary me-1 move-up">上移</button>' +
+          '<button type="button" class="btn btn-sm btn-outline-secondary me-1 move-down">下移</button>' +
+          '<button type="button" class="btn btn-sm btn-outline-danger remove-case">移除</button>' +
+        '</span>' +
+      '</div>';
+    }).join('');
+    $('#selectedCaseList').html(rows || '<div class="text-secondary border rounded p-3">暂无已选用例</div>');
+  }
+
+  function findCaseOption(caseId) {
+    return suiteOptions.cases.find(function (row) { return Number(row.id) === Number(caseId); });
+  }
+
+  function stepHasOverride(step) {
+    var base = baseConfigForStep(step);
+    return step.method !== base.method ||
+      step.url !== base.url ||
+      step.body_type !== base.body_type ||
+      !sameConfig(step.request_params, base.request_params) ||
+      !sameConfig(step.headers, base.headers) ||
+      !sameConfig(step.body, base.body) ||
+      !sameConfig(step.assertions, base.assertions) ||
+      !sameConfig(step.extractors, base.extractors) ||
+      !sameConfig(step.ws_steps, base.ws_steps) ||
+      Number(step.timeout_seconds) !== Number(base.timeout_seconds);
+  }
+
+  function loadSuiteIfNeeded() {
+    var suiteId = $('#suiteId').val();
+    if (!suiteId) {
+      return $.Deferred().resolve().promise();
+    }
+    return $.ajax({
+      url: '/api/test-suite/detail',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({suite_id: Number(suiteId)})
+    }).done(function (resp) {
+      var suite = resp.data;
+      $('#projectSelect').val(suite.project_id);
+      $('#suiteType').val(suite.suite_type);
+      $('#suiteName').val(suite.name);
+      $('#suiteDescription').val(suite.description);
+      $('#suiteActive').prop('checked', suite.is_active);
+      $('#suiteEnvironmentSelect').val(suite.environment_id || $('#suiteEnvironmentSelect').val());
+      suiteSteps = (suite.steps || []).map(normalizeStep);
+      renderCasePool();
+    });
+  }
+
+  function collectPayload() {
+    return {
+      project_id: Number($('#projectSelect').val()),
+      environment_id: Number($('#suiteEnvironmentSelect').val()) || null,
+      name: $('#suiteName').val(),
+      suite_type: $('#suiteType').val(),
+      description: $('#suiteDescription').val(),
+      is_active: $('#suiteActive').is(':checked'),
+      steps: collectStepsPayload()
+    };
+  }
+
+  function collectStepsPayload() {
+    return suiteSteps.map(function (step) {
+      return {
+        case_id: Number(step.case_id),
+        step_name: step.step_name || '',
+        is_active: step.is_active !== false,
+        method: step.method,
+        url: step.url,
+        body_type: step.body_type,
+        request_params: step.request_params || {},
+        headers: step.headers || {},
+        body: step.body || {},
+        assertions: step.assertions || [],
+        extractors: step.extractors || [],
+        ws_steps: step.ws_steps || [],
+        timeout_seconds: Number(step.timeout_seconds || 30)
+      };
+    });
+  }
+
+  function normalizeStep(step) {
+    var base = baseConfigForCase(step.case_id);
+    return {
+      client_id: nextStepClientId++,
+      suite_case_id: step.suite_case_id || null,
+      case_id: Number(step.case_id),
+      step_name: step.step_name || '',
+      is_active: step.is_active !== false,
+      method: step.method || base.method,
+      url: step.url || base.url,
+      body_type: step.body_type || base.body_type,
+      request_params: cloneConfig(step.request_params !== undefined ? step.request_params : base.request_params),
+      headers: cloneConfig(step.headers !== undefined ? step.headers : base.headers),
+      body: cloneConfig(step.body !== undefined ? step.body : base.body),
+      assertions: cloneConfig(step.assertions !== undefined ? step.assertions : base.assertions),
+      extractors: cloneConfig(step.extractors !== undefined ? step.extractors : base.extractors),
+      ws_steps: cloneConfig(step.ws_steps !== undefined ? step.ws_steps : base.ws_steps),
+      timeout_seconds: step.timeout_seconds || base.timeout_seconds || 30
+    };
+  }
+
+  function baseConfigForCase(caseId) {
+    var item = findCaseOption(caseId);
+    if (!item) {
+      return {
+        method: 'GET',
+        url: '',
+        body_type: 'none',
+        request_params: {},
+        headers: {},
+        body: {},
+        assertions: [],
+        extractors: [],
+        ws_steps: [],
+        timeout_seconds: 30
+      };
+    }
+    return item.base_config || {
+      method: item.method || 'GET',
+      url: item.url || '',
+      body_type: item.body_type || 'none',
+      request_params: item.base_request_params || {},
+      headers: item.base_headers || {},
+      body: item.base_body || {},
+      assertions: item.base_assertions || [],
+      extractors: item.base_extractors || [],
+      ws_steps: item.base_ws_steps || [],
+      timeout_seconds: item.base_timeout_seconds || 30
+    };
+  }
+
+  function baseConfigForStep(step) {
+    return baseConfigForCase(step.case_id);
+  }
+
+  function cloneConfig(value) {
+    return JSON.parse(JSON.stringify(value === undefined || value === null ? {} : value));
+  }
+
+  function sameConfig(left, right) {
+    return JSON.stringify(left === undefined ? null : left) === JSON.stringify(right === undefined ? null : right);
+  }
+
+  function createStep(caseId) {
+    return normalizeStep({case_id: caseId, is_active: true});
+  }
+
+  function saveSuite() {
+    clearSuiteError();
+    var id = $('#suiteId').val();
+    var payload = collectPayload();
+    if (id) {
+      payload.suite_id = Number(id);
+    }
+    return $.ajax({
+      url: id ? '/api/test-suite/save' : '/api/test-suite/create',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify(payload)
+    }).done(function (resp) {
+      $('#suiteId').val(resp.data.id);
+    }).fail(function (xhr) {
+      showSuiteError((xhr.responseJSON && xhr.responseJSON.message) || '保存失败');
+    });
+  }
+
+  function runSuite() {
+    clearSuiteError();
+    var suiteId = Number($('#suiteId').val());
+    var environmentId = Number($('#suiteEnvironmentSelect').val());
+    if (!suiteId) {
+      showSuiteError('请先保存集合，再进行手动执行');
+      return;
+    }
+    if (!environmentId) {
+      showSuiteError('请选择集合执行环境');
+      return;
+    }
+    $.ajax({
+      url: '/api/test-suite/execute',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({suite_id: suiteId, environment_id: environmentId})
+    }).done(function (runResp) {
+      renderRunResult(runResp.data || {});
+    }).fail(function (xhr) {
+      showSuiteError((xhr.responseJSON && xhr.responseJSON.message) || '执行失败');
+    });
+  }
+
+  function renderRunResult(result) {
+    $('#runTotal').text(result.total_count);
+    $('#runSuccess').text(result.success_count);
+    $('#runFail').text(result.fail_count);
+    $('#runError').text(result.error_count);
+    $('#runMeta').html('历史 ID：' + escapeHtml(result.history_id) + (result.interrupted ? '，场景集合已中断' : ''));
+    renderRunDetails(result.details || []);
+  }
+
+  function renderRunDetails(details) {
+    var rows = details.map(function (item, index) {
+      var badge = item.status === 'pass' ? 'success' : (item.status === 'skipped' ? 'secondary' : 'danger');
+      var detailId = 'executionDetail' + index;
+      return '<div class="execution-detail-item">' +
+        '<div class="execution-detail-header">' +
+          '<div class="execution-detail-title">' +
+            '<div>' +
+              '<span class="badge text-bg-' + badge + '">' + escapeHtml(item.status) + '</span>' +
+              '<span class="ms-2 fw-semibold">' + escapeHtml(item.sort_order || index + 1) + '. ' + escapeHtml(item.case_name) + '</span>' +
+            '</div>' +
+            '<div class="text-secondary text-truncate">' + escapeHtml((item.method || '') + ' ' + (item.url || item.interface_name || '')) + '</div>' +
+            (item.error_message ? '<div class="text-danger mt-1">' + escapeHtml(item.error_message) + '</div>' : '') +
+          '</div>' +
+          '<button type="button" class="btn btn-sm btn-outline-secondary detail-toggle" data-bs-toggle="collapse" data-bs-target="#' + detailId + '" aria-expanded="false">展开</button>' +
+        '</div>' +
+        '<div class="collapse execution-detail-body" id="' + detailId + '">' +
+          detailSection('真实请求', item.request_snapshot || {}) +
+          detailSection('真实响应', item.response_snapshot || {}) +
+          assertionSection(item.assertions_detail || []) +
+          websocketSection(item.ws_messages || []) +
+        '</div>' +
+      '</div>';
+    }).join('');
+    $('#runDetails').html(rows || '暂无详情');
+  }
+
+  function detailSection(title, value) {
+    return '<div class="mb-3">' +
+      '<div class="fw-semibold mb-1">' + escapeHtml(title) + '</div>' +
+      '<pre class="execution-detail-pre mb-0">' + escapeHtml(formatDetailValue(value)) + '</pre>' +
+    '</div>';
+  }
+
+  function assertionSection(assertions) {
+    if (!assertions.length) {
+      return '<div class="mb-3"><div class="fw-semibold mb-1">断言明细</div><div class="text-secondary">暂无断言明细</div></div>';
+    }
+    var rows = assertions.map(function (item) {
+      var badge = item.passed ? 'success' : 'danger';
+      return '<div class="border rounded p-2 mb-2">' +
+        '<span class="badge text-bg-' + badge + '">' + (item.passed ? '通过' : '失败') + '</span>' +
+        '<span class="ms-2 fw-semibold">' + escapeHtml(item.name || item.source || '断言') + '</span>' +
+        '<div class="mt-1">实际值：<span class="font-monospace">' + escapeHtml(formatDetailValue(item.actual)) + '</span></div>' +
+        '<div>期望值：<span class="font-monospace">' + escapeHtml(formatDetailValue(item.expected)) + '</span></div>' +
+        '<div class="text-secondary">' + escapeHtml(item.message || '') + '</div>' +
+      '</div>';
+    }).join('');
+    return '<div class="mb-3"><div class="fw-semibold mb-1">断言明细</div>' + rows + '</div>';
+  }
+
+  function websocketSection(messages) {
+    if (!messages.length) {
+      return '';
+    }
+    return detailSection('WebSocket 消息', messages);
+  }
+
+  function formatDetailValue(value) {
+    if (value === null || value === undefined || value === '') {
+      return '-';
+    }
+    if (typeof value === 'string') {
+      try {
+        return JSON.stringify(JSON.parse(value), null, 2);
+      } catch (err) {
+        return value;
+      }
+    }
+    return JSON.stringify(value, null, 2);
+  }
+
+  function parseJsonText(text) {
+    var value = text || '';
+    return value.trim() ? JSON.parse(value) : {};
+  }
+
+  function prettyJson(value) {
+    return JSON.stringify(value === null || value === undefined ? {} : value, null, 2);
+  }
+
+  function openStepConfig(index) {
+    var step = suiteSteps[index];
+    $('#stepConfigError').addClass('d-none').text('');
+    $('#editingStepIndex').val(index);
+    fillStepEditors(step);
+    stepConfigModal.show();
+  }
+
+  function fillStepEditors(config) {
+    $('#stepName').val(config.step_name || '');
+    $('#stepActive').prop('checked', config.is_active !== false);
+    $('#stepTimeout').val(config.timeout_seconds || 30);
+    $('#stepMethodSelect').val((config.method || 'GET').toUpperCase());
+    $('#stepRequestUrl').val(config.url || '');
+    setStepBodyType(config.body_type || 'none');
+    renderStepKvRows('#stepParamsTable', objectToStepRows(config.request_params || {}, true));
+    renderStepKvRows('#stepHeadersTable', objectToStepRows(config.headers || {}, true));
+    fillStepBodyFromValue(config.body || {});
+    renderStepAssertions(config.assertions || []);
+    renderStepExtractors(config.extractors || []);
+    if (config.interface_type === 'websocket') {
+      $('#addStepWsBtn').prop('disabled', true).addClass('d-none');
+      $('#stepWsList').html('<div class="alert alert-info mb-0">WebSocket 的发送、等待与断言步骤请在“接口用例”页面维护；集合在执行时直接复用已保存步骤，避免两套配置产生差异。当前共 ' + (config.ws_steps || []).length + ' 个步骤。</div>');
+      bootstrap.Tab.getOrCreateInstance(document.querySelector('[data-bs-target="#stepWsPane"]')).show();
+    } else {
+      $('#addStepWsBtn').prop('disabled', false).removeClass('d-none');
+      renderStepWsSteps([]);
+    }
+  }
+
+  function objectToStepRows(value, enabled) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return [];
+    }
+    return Object.keys(value).map(function (key) {
+      return {enabled: enabled !== false, key: key, value: value[key], description: ''};
+    });
+  }
+
+  function renderStepKvRows(selector, rows) {
+    $(selector + ' tbody').empty();
+    (rows && rows.length ? rows : [{}]).forEach(function (row) { addStepKvRow(selector, row); });
+  }
+
+  function addStepKvRow(selector, row) {
+    row = row || {};
+    var html = '<tr>' +
+      '<td class="step-kv-enabled"><input class="form-check-input step-kv-check" type="checkbox"' + (row.enabled === false ? '' : ' checked') + '></td>' +
+      '<td><input class="form-control step-kv-key" placeholder="Key" value="' + escapeHtml(row.key || '') + '"></td>' +
+      '<td><input class="form-control step-kv-value" placeholder="Value，支持 {{变量}} 和 ${提取变量}" value="' + escapeHtml(row.value || '') + '"></td>' +
+      '<td><input class="form-control step-kv-description" placeholder="Description" value="' + escapeHtml(row.description || '') + '"></td>' +
+      '<td class="step-kv-action"><button type="button" class="btn btn-sm btn-outline-danger remove-step-row">删除</button></td>' +
+    '</tr>';
+    $(selector + ' tbody').append(html);
+  }
+
+  function stepRowsToObject(selector) {
+    var data = {};
+    $(selector + ' tbody tr').each(function () {
+      var enabled = $(this).find('.step-kv-check').is(':checked');
+      var key = $(this).find('.step-kv-key').val();
+      var value = $(this).find('.step-kv-value').val();
+      if (enabled && key) {
+        data[key] = value;
+      }
+    });
+    return data;
+  }
+
+  function normalizeStepBodyType(type) {
+    return type || 'none';
+  }
+
+  function setStepBodyType(type) {
+    currentStepBodyType = normalizeStepBodyType(type);
+    $('#stepBodyTypeSelect').val(currentStepBodyType);
+    $('.step-body-type').removeClass('active');
+    var activeBodyType = currentStepBodyType === 'form' ? 'x-www-form-urlencoded' : currentStepBodyType;
+    activeBodyType = activeBodyType === 'raw' ? 'json' : activeBodyType;
+    $('.step-body-type[data-body-type="' + activeBodyType + '"]').addClass('active');
+    $('#stepBodyNone').toggle(currentStepBodyType === 'none');
+    $('#stepBodyKv').toggle(
+      currentStepBodyType === 'form-data' ||
+      currentStepBodyType === 'x-www-form-urlencoded' ||
+      currentStepBodyType === 'form'
+    );
+    $('#stepBodyJson').toggle(currentStepBodyType === 'json' || currentStepBodyType === 'raw');
+  }
+
+  function fillStepBodyFromValue(value) {
+    if (
+      currentStepBodyType === 'form-data' ||
+      currentStepBodyType === 'x-www-form-urlencoded' ||
+      currentStepBodyType === 'form'
+    ) {
+      renderStepKvRows('#stepBodyTable', objectToStepRows(value || {}, true));
+      return;
+    }
+    if (currentStepBodyType === 'json' || currentStepBodyType === 'raw') {
+      $('#stepBodyJsonText').val(typeof value === 'string' ? value : prettyJson(value || {}));
+      return;
+    }
+    $('#stepBodyJsonText').val('');
+    renderStepKvRows('#stepBodyTable', []);
+  }
+
+  function collectStepBody() {
+    if (currentStepBodyType === 'none') {
+      return {};
+    }
+    if (
+      currentStepBodyType === 'form-data' ||
+      currentStepBodyType === 'x-www-form-urlencoded' ||
+      currentStepBodyType === 'form'
+    ) {
+      return stepRowsToObject('#stepBodyTable');
+    }
+    if (currentStepBodyType === 'json') {
+      return parseJsonText($('#stepBodyJsonText').val());
+    }
+    if (currentStepBodyType === 'raw') {
+      return $('#stepBodyJsonText').val();
+    }
+    return {};
+  }
+
+  function beautifyStepJson() {
+    $('#stepConfigError').addClass('d-none').text('');
+    try {
+      $('#stepBodyJsonText').val(prettyJson(parseJsonText($('#stepBodyJsonText').val())));
+    } catch (err) {
+      $('#stepConfigError').removeClass('d-none').text('Body JSON 格式错误：' + err.message);
+    }
+  }
+
+  function defaultStepStatusAssertion() {
+    return {name: 'status_code', source: 'status_code', comparator: 'equals', expected: '200', value_type: 'int'};
+  }
+
+  function addStepAssertion(item) {
+    item = item || {};
+    var html = '<div class="border rounded p-3 mb-2 step-assertion-item">' +
+      '<div class="row g-2">' +
+        '<div class="col-md-2"><input class="form-control step-assertion-name" placeholder="断言名称" value="' + escapeHtml(item.name || '') + '"></div>' +
+        '<div class="col-md-2"><select class="form-select step-assertion-source">' + stepSourceOptions(item.source) + '</select></div>' +
+        '<div class="col-md-2 step-assertion-jsonpath-field"><input class="form-control step-assertion-jsonpath" placeholder="JSONPath，如 $.data.id" value="' + escapeHtml(item.jsonpath || '') + '"></div>' +
+        '<div class="col-md-2 step-assertion-header-field"><input class="form-control step-assertion-header" placeholder="响应头名称，如 Content-Type" value="' + escapeHtml(item.header || '') + '"></div>' +
+        '<div class="col-md-2"><select class="form-select step-assertion-comparator">' + stepComparatorOptions(item.comparator) + '</select></div>' +
+        '<div class="col-md-2 step-assertion-value-type-field"><select class="form-select step-assertion-value-type">' + stepValueTypeOptions(item.value_type) + '</select></div>' +
+        '<div class="col-md-1"><button type="button" class="btn btn-outline-danger w-100 remove-step-item">删</button></div>' +
+        '<div class="col-12"><input class="form-control step-assertion-expected" placeholder="期望值" value="' + escapeHtml(item.expected === null || item.expected === undefined ? '' : item.expected) + '"></div>' +
+      '</div>' +
+    '</div>';
+    $('#stepAssertionList').append(html);
+    updateStepAssertionFields($('#stepAssertionList .step-assertion-item').last());
+  }
+
+  function renderStepAssertions(items) {
+    $('#stepAssertionList').empty();
+    (items && items.length ? items : [defaultStepStatusAssertion()]).forEach(addStepAssertion);
+  }
+
+  function stepSourceOptions(selected) {
+    var values = ['status_code', 'headers', 'body_json', 'body_text', 'body_type', 'body_length', 'elapsed_ms', 'ws_message'];
+    return values.map(function (value) {
+      return '<option value="' + value + '"' + (value === selected ? ' selected' : '') + '>' + value + '</option>';
+    }).join('');
+  }
+
+  function stepComparatorOptions(selected) {
+    selected = selected || 'equals';
+    return (suiteOptions.assertion_comparators || []).map(function (item) {
+      return '<option value="' + item.value + '"' + (item.value === selected ? ' selected' : '') + '>' + escapeHtml(item.label) + '</option>';
+    }).join('');
+  }
+
+  function stepValueTypeOptions(selected) {
+    selected = selected === 'raw' ? '' : (selected || '');
+    return (suiteOptions.assertion_value_types || []).map(function (item) {
+      return '<option value="' + item.value + '"' + (item.value === selected ? ' selected' : '') + '>' + escapeHtml(item.label) + '</option>';
+    }).join('');
+  }
+
+  function updateStepAssertionFields($item) {
+    var source = $item.find('.step-assertion-source').val();
+    var comparator = $item.find('.step-assertion-comparator').val();
+    var withoutExpected = comparator === 'is_none' || comparator === 'is_not_none';
+    $item.find('.step-assertion-jsonpath-field').toggle(source === 'body_json');
+    $item.find('.step-assertion-header-field').toggle(source === 'headers');
+    $item.find('.step-assertion-expected')
+      .prop('disabled', withoutExpected)
+      .attr('placeholder', withoutExpected ? '该比较器不需要期望值' : '期望值');
+    $item.find('.step-assertion-value-type').prop('disabled', withoutExpected);
+  }
+
+  function collectStepAssertions() {
+    var items = [];
+    $('.step-assertion-item').each(function () {
+      var source = $(this).find('.step-assertion-source').val();
+      var comparator = $(this).find('.step-assertion-comparator').val();
+      var item = {
+        name: $(this).find('.step-assertion-name').val(),
+        source: source,
+        comparator: comparator,
+        value_type: comparator === 'is_none' || comparator === 'is_not_none'
+          ? ''
+          : $(this).find('.step-assertion-value-type').val()
+      };
+      if (source === 'body_json') {
+        item.jsonpath = $(this).find('.step-assertion-jsonpath').val();
+      }
+      if (source === 'headers') {
+        item.header = $(this).find('.step-assertion-header').val();
+      }
+      if (comparator !== 'is_none' && comparator !== 'is_not_none') {
+        item.expected = $(this).find('.step-assertion-expected').val();
+      }
+      if (item.source || item.expected || item.jsonpath) {
+        items.push(item);
+      }
+    });
+    return items;
+  }
+
+  function validateStepAssertions(assertions) {
+    for (var index = 0; index < assertions.length; index += 1) {
+      var item = assertions[index];
+      if (item.source === 'headers' && !(item.header || '').trim()) {
+        throw new Error('第 ' + (index + 1) + ' 条断言的响应头名称不能为空');
+      }
+      if (item.source === 'body_json' && !(item.jsonpath || '').trim()) {
+        throw new Error('第 ' + (index + 1) + ' 条断言的 JSONPath 不能为空');
+      }
+    }
+  }
+
+  function addStepExtractor(item) {
+    item = item || {};
+    var html = '<div class="border rounded p-3 mb-2 step-extractor-item">' +
+      '<div class="row g-2">' +
+        '<div class="col-md-5"><input class="form-control step-extractor-jsonpath" placeholder="JSONPath，如 $.data.token" value="' + escapeHtml(item.jsonpath || '') + '"></div>' +
+        '<div class="col-md-4"><input class="form-control step-extractor-name" placeholder="变量名，如 token；后续用 ${token}" value="' + escapeHtml(item.variable_name || '') + '"></div>' +
+        '<div class="col-md-2 d-flex align-items-center"><div class="form-check"><input class="form-check-input step-extractor-required" type="checkbox"' + (item.required ? ' checked' : '') + '><label class="form-check-label">必填</label></div></div>' +
+        '<div class="col-md-1"><button type="button" class="btn btn-outline-danger w-100 remove-step-item">删</button></div>' +
+      '</div>' +
+    '</div>';
+    $('#stepExtractorList').append(html);
+  }
+
+  function renderStepExtractors(items) {
+    $('#stepExtractorList').empty();
+    (items && items.length ? items : [{}]).forEach(addStepExtractor);
+  }
+
+  function collectStepExtractors() {
+    var items = [];
+    $('.step-extractor-item').each(function () {
+      var item = {
+        jsonpath: $(this).find('.step-extractor-jsonpath').val(),
+        variable_name: $(this).find('.step-extractor-name').val(),
+        required: $(this).find('.step-extractor-required').is(':checked')
+      };
+      if (item.jsonpath || item.variable_name) {
+        items.push(item);
+      }
+    });
+    return items;
+  }
+
+  function addStepWsStep(item) {
+    item = item || {};
+    var html = '<div class="border rounded p-3 mb-2 step-ws-item">' +
+      '<div class="row g-2">' +
+        '<div class="col-md-3"><select class="form-select step-ws-action">' + stepWsActionOptions(item.action) + '</select></div>' +
+        '<div class="col-md-4"><input class="form-control step-ws-message" placeholder="发送消息" value="' + escapeHtml(item.message || '') + '"></div>' +
+        '<div class="col-md-3"><input class="form-control step-ws-expected" placeholder="期望包含" value="' + escapeHtml(item.expected || '') + '"></div>' +
+        '<div class="col-md-1"><input class="form-control step-ws-timeout" type="number" min="1" placeholder="秒" value="' + escapeHtml(item.timeout_seconds || '') + '"></div>' +
+        '<div class="col-md-1"><button type="button" class="btn btn-outline-danger w-100 remove-step-item">删</button></div>' +
+      '</div>' +
+    '</div>';
+    $('#stepWsList').append(html);
+  }
+
+  function renderStepWsSteps(items) {
+    $('#stepWsList').empty();
+    (items && items.length ? items : [{action: 'connect'}, {action: 'close'}]).forEach(addStepWsStep);
+  }
+
+  function stepWsActionOptions(selected) {
+    var values = ['connect', 'send', 'receive_assert', 'close'];
+    selected = selected || 'send';
+    return values.map(function (value) {
+      return '<option value="' + value + '"' + (value === selected ? ' selected' : '') + '>' + value + '</option>';
+    }).join('');
+  }
+
+  function collectStepWsSteps() {
+    var items = [];
+    $('.step-ws-item').each(function () {
+      var timeoutValue = $(this).find('.step-ws-timeout').val();
+      items.push({
+        action: $(this).find('.step-ws-action').val(),
+        message: $(this).find('.step-ws-message').val(),
+        expected: $(this).find('.step-ws-expected').val(),
+        timeout_seconds: timeoutValue ? Number(timeoutValue) : null
+      });
+    });
+    return items;
+  }
+
+  function collectStepConfig() {
+    var editingIndex = Number($('#editingStepIndex').val());
+    var currentStep = suiteSteps[editingIndex];
+    if (currentStep && currentStep.interface_type === 'websocket') {
+      var websocketConfig = cloneConfig(currentStep);
+      websocketConfig.step_name = $('#stepName').val();
+      websocketConfig.is_active = $('#stepActive').is(':checked');
+      websocketConfig.timeout_seconds = Number($('#stepTimeout').val() || 60);
+      return websocketConfig;
+    }
+    var assertions = collectStepAssertions();
+    validateStepAssertions(assertions);
+    return {
+      step_name: $('#stepName').val(),
+      is_active: $('#stepActive').is(':checked'),
+      method: $('#stepMethodSelect').val(),
+      url: $('#stepRequestUrl').val(),
+      body_type: currentStepBodyType,
+      request_params: stepRowsToObject('#stepParamsTable'),
+      headers: stepRowsToObject('#stepHeadersTable'),
+      body: collectStepBody(),
+      assertions: assertions,
+      extractors: collectStepExtractors(),
+      ws_steps: collectStepWsSteps(),
+      timeout_seconds: Number($('#stepTimeout').val() || 30)
+    };
+  }
+
+  function resetCurrentStepConfig() {
+    var index = Number($('#editingStepIndex').val());
+    var current = suiteSteps[index];
+    var baseConfig = cloneConfig(baseConfigForStep(current));
+    baseConfig.step_name = current.step_name || '';
+    baseConfig.is_active = current.is_active !== false;
+    fillStepEditors(baseConfig);
+  }
+
+  $('#projectSelect').on('change', function () {
+    suiteSteps = [];
+    renderCasePool();
+  });
+  $('#addCaseBtn').on('click', function () {
+    var id = Number($('#casePool').val());
+    if (id) {
+      suiteSteps.push(createStep(id));
+      renderCasePool();
+    }
+  });
+  $('#selectedCaseList').on('click', 'button', function () {
+    var index = Number($(this).closest('[data-index]').data('index'));
+    if ($(this).hasClass('config-step')) {
+      openStepConfig(index);
+      return;
+    }
+    if ($(this).hasClass('remove-case')) {
+      suiteSteps.splice(index, 1);
+    }
+    if ($(this).hasClass('move-up') && index > 0) {
+      var upStep = suiteSteps.splice(index, 1)[0];
+      suiteSteps.splice(index - 1, 0, upStep);
+    }
+    if ($(this).hasClass('move-down') && index < suiteSteps.length - 1) {
+      var downStep = suiteSteps.splice(index, 1)[0];
+      suiteSteps.splice(index + 1, 0, downStep);
+    }
+    renderCasePool();
+  });
+  $('#addStepParamBtn').on('click', function () {
+    addStepKvRow('#stepParamsTable');
+  });
+  $('#addStepBodyParamBtn').on('click', function () {
+    addStepKvRow('#stepBodyTable');
+  });
+  $('#addStepHeaderBtn').on('click', function () {
+    addStepKvRow('#stepHeadersTable');
+  });
+  $('#addStepAssertionBtn').on('click', function () {
+    addStepAssertion();
+  });
+  $('#addStepExtractorBtn').on('click', function () {
+    addStepExtractor();
+  });
+  $('#addStepWsBtn').on('click', function () {
+    addStepWsStep();
+  });
+  $('.step-body-type').on('click', function () {
+    setStepBodyType($(this).data('body-type'));
+  });
+  $('#stepBodyTypeSelect').on('change', function () {
+    setStepBodyType($(this).val());
+  });
+  $('#beautifyStepJsonBtn').on('click', beautifyStepJson);
+  $('#resetStepConfigBtn').on('click', resetCurrentStepConfig);
+  $('#stepConfigModal').on('click', '.remove-step-row', function () {
+    $(this).closest('tr').remove();
+  });
+  $('#stepConfigModal').on('click', '.remove-step-item', function () {
+    $(this).closest('.step-assertion-item, .step-extractor-item, .step-ws-item').remove();
+  });
+  $('#stepConfigModal').on('change', '.step-assertion-source, .step-assertion-comparator', function () {
+    updateStepAssertionFields($(this).closest('.step-assertion-item'));
+  });
+  $('#stepConfigForm').on('submit', function (event) {
+    event.preventDefault();
+    try {
+      var index = Number($('#editingStepIndex').val());
+      var current = suiteSteps[index];
+      suiteSteps[index] = Object.assign({}, current, collectStepConfig());
+      var suiteId = Number($('#suiteId').val());
+      if (!suiteId) {
+        stepConfigModal.hide();
+        renderSelectedSteps();
+        showSuiteNotice('步骤配置已暂存在当前页面，请先保存集合后再手动执行');
+        return;
+      }
+      $.ajax({
+        url: '/api/test-suite/save-steps',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({suite_id: suiteId, steps: collectStepsPayload()})
+      }).done(function () {
+        stepConfigModal.hide();
+        renderSelectedSteps();
+        showSuiteNotice('步骤配置已保存');
+      }).fail(function (xhr) {
+        $('#stepConfigError').removeClass('d-none').text((xhr.responseJSON && xhr.responseJSON.message) || '步骤配置保存失败');
+      });
+    } catch (err) {
+      $('#stepConfigError').removeClass('d-none').text('步骤配置错误：' + err.message);
+    }
+  });
+  $('#saveSuiteBtn').on('click', function () {
+    saveSuite().done(function () { window.location.href = '/suites/'; });
+  });
+  $('#runSuiteBtn').on('click', runSuite);
+  $('#runDetails').on('shown.bs.collapse', '.collapse', function () {
+    $(this).closest('.execution-detail-item').find('.detail-toggle').text('收起');
+  });
+  $('#runDetails').on('hidden.bs.collapse', '.collapse', function () {
+    $(this).closest('.execution-detail-item').find('.detail-toggle').text('展开');
+  });
+
+  $.when(loadOptions()).done(loadSuiteIfNeeded);
+</script>
+{% endblock %}

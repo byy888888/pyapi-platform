@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}接口库管理 - 接口自动化测试平台{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1 class="h4 mb-1">接口库管理</h1>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-primary" href="/interfaces/new/http">新增 HTTP 接口</a>
+      <a class="btn btn-outline-primary" href="/interfaces/new/websocket">新增 WebSocket 接口</a>
+    </div>
+  </div>
+
+  <div class="panel mb-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label mb-1" for="projectFilter">项目</label>
+        <select class="form-select" id="projectFilter"><option value="">全部项目</option></select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label mb-1" for="moduleFilter">模块</label>
+        <select class="form-select" id="moduleFilter" disabled><option value="">全部模块</option></select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label mb-1" for="urlFilter">URL</label>
+        <input class="form-control" id="urlFilter" placeholder="输入 URL 关键词">
+      </div>
+      <div class="col-md-3 d-flex gap-2">
+        <button type="button" class="btn btn-outline-primary flex-fill" id="searchBtn">搜索</button>
+        <button type="button" class="btn btn-outline-secondary flex-fill" id="resetBtn">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th style="width: 70px;">ID</th>
+          <th>项目</th>
+          <th>模块</th>
+          <th>接口名称</th>
+          <th style="width: 110px;">类型</th>
+          <th style="width: 90px;">方法</th>
+          <th>URL</th>
+          <th style="width: 90px;">用例数</th>
+          <th style="width: 90px;">状态</th>
+          <th style="width: 250px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="interfaceRows"></tbody>
+    </table>
+    <div id="interfacePagination" class="pagination-bar"></div>
+  </div>
+
+  <div class="modal fade" id="caseModal" tabindex="-1" aria-labelledby="caseModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="caseModalTitle">关联用例</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+        </div>
+        <div class="modal-body">
+          <table class="table table-hover mb-0">
+            <thead><tr><th>用例名称</th><th>执行环境</th><th style="width:100px;">操作</th></tr></thead>
+            <tbody id="caseModalRows"></tbody>
+          </table>
+          <div id="caseModalPagination" class="pagination-bar"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var interfaces = [];
+  var interfacePage = {page: 1, page_size: 10};
+  var interfaceOptions = {projects: [], modules: []};
+  var caseModal = new bootstrap.Modal(document.getElementById('caseModal'));
+  var currentCaseInterface = null;
+  var casePage = {page: 1, page_size: 10};
+
+  function escapeHtml(text) {
+    return $('<div>').text(text || '').html();
+  }
+
+  function loadInterfaces() {
+    var requestData = Object.assign({}, interfacePage, {
+      project_id: Number($('#projectFilter').val()) || null,
+      module_id: Number($('#moduleFilter').val()) || null,
+      url: $('#urlFilter').val()
+    });
+    return $.ajax({
+      url: '/api/interface-definition/list',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify(requestData)
+    }).done(function (resp) {
+      interfaces = resp.data || [];
+      var rows = interfaces.map(function (item) {
+        return '<tr>' +
+          '<td>' + item.id + '</td>' +
+          '<td>' + escapeHtml(item.project_name) + '</td>' +
+          '<td>' + escapeHtml(item.module_name) + '</td>' +
+          '<td class="fw-semibold">' + escapeHtml(item.name) + '</td>' +
+          '<td><span class="badge text-bg-info">' + escapeHtml(item.interface_type) + '</span></td>' +
+          '<td>' + escapeHtml(item.method) + '</td>' +
+          '<td class="code-cell">' + escapeHtml(item.url) + '</td>' +
+          '<td><button class="btn btn-sm btn-link p-0" data-action="cases" data-id="' + item.id + '">' + item.case_count + '</button></td>' +
+          '<td>' + (item.is_active ? '<span class="badge text-bg-success">启用</span>' : '<span class="badge text-bg-secondary">停用</span>') + '</td>' +
+          '<td>' +
+            '<a class="btn btn-sm btn-outline-primary me-1" href="' + editInterfaceUrl(item) + '">编辑</a>' +
+            '<a class="btn btn-sm btn-outline-success me-1" href="' + newCaseUrl(item.id) + '">新增用例</a>' +
+            '<button class="btn btn-sm btn-outline-danger" data-action="delete" data-id="' + item.id + '">删除</button>' +
+          '</td>' +
+        '</tr>';
+      }).join('');
+      $('#interfaceRows').html(rows || '<tr><td colspan="10" class="text-center text-secondary py-4">暂无接口</td></tr>');
+      renderPagination('#interfacePagination', resp.pagination, function (page, pageSize) {
+        interfacePage = {page: page, page_size: pageSize};
+        syncSearchUrl();
+        loadInterfaces();
+      });
+    });
+  }
+
+  function loadOptions() {
+    return $.ajax({url: '/api/interface-definition/options', method: 'POST', contentType: 'application/json', data: '{}'}).done(function (resp) {
+      interfaceOptions = resp.data || {projects: [], modules: []};
+      $('#projectFilter').html('<option value="">全部项目</option>' + interfaceOptions.projects.map(function (item) {
+        return '<option value="' + item.id + '">' + escapeHtml(item.name) + '</option>';
+      }).join(''));
+      applyUrlState();
+      renderModuleFilter();
+    });
+  }
+
+  function renderModuleFilter(selectedId) {
+    var projectId = Number($('#projectFilter').val());
+    var modules = interfaceOptions.modules.filter(function (item) { return Number(item.project_id) === projectId; });
+    $('#moduleFilter').prop('disabled', !projectId).html('<option value="">全部模块</option>' + modules.map(function (item) {
+      return '<option value="' + item.id + '">' + escapeHtml(item.name) + '</option>';
+    }).join(''));
+    if (selectedId) { $('#moduleFilter').val(String(selectedId)); }
+  }
+
+  function applyUrlState() {
+    var params = new URLSearchParams(window.location.search);
+    $('#projectFilter').val(params.get('project_id') || '');
+    $('#urlFilter').val(params.get('url') || '');
+    interfacePage.page = Number(params.get('page')) || 1;
+    interfacePage.page_size = Number(params.get('page_size')) || 10;
+  }
+
+  function syncSearchUrl() {
+    var params = new URLSearchParams();
+    if ($('#projectFilter').val()) { params.set('project_id', $('#projectFilter').val()); }
+    if ($('#moduleFilter').val()) { params.set('module_id', $('#moduleFilter').val()); }
+    if ($('#urlFilter').val()) { params.set('url', $('#urlFilter').val()); }
+    params.set('page', interfacePage.page);
+    params.set('page_size', interfacePage.page_size);
+    window.history.replaceState(null, '', window.location.pathname + '?' + params.toString());
+  }
+
+  function currentReturnTo() {
+    return window.location.pathname + buildSearchQuery();
+  }
+
+  function buildSearchQuery() {
+    var params = new URLSearchParams();
+    if ($('#projectFilter').val()) { params.set('project_id', $('#projectFilter').val()); }
+    if ($('#moduleFilter').val()) { params.set('module_id', $('#moduleFilter').val()); }
+    if ($('#urlFilter').val()) { params.set('url', $('#urlFilter').val()); }
+    params.set('page', interfacePage.page);
+    params.set('page_size', interfacePage.page_size);
+    return '?' + params.toString();
+  }
+
+  function newCaseUrl(interfaceId) {
+    var item = interfaces.find(function (entry) { return entry.id === interfaceId; });
+    var path = item && item.interface_type === 'websocket' ? '/cases/new/websocket' : '/cases/new/http';
+    return path + '?interface_id=' + interfaceId + '&return_to=' + encodeURIComponent(currentReturnTo());
+  }
+
+  function editInterfaceUrl(item) {
+    return '/interfaces/' + item.id + '/edit/' + (item.interface_type === 'websocket' ? 'websocket' : 'http');
+  }
+
+  function environmentBadge(item) {
+    var styles = {production: 'text-bg-danger', staging: 'text-bg-warning', testing: 'text-bg-primary', development: 'text-bg-success'};
+    return escapeHtml(item.environment_name || '-') + (item.environment_type_name ? ' <span class="badge ' + (styles[item.environment_type] || 'text-bg-secondary') + '">' + escapeHtml(item.environment_type_name) + '</span>' : '');
+  }
+
+  function loadInterfaceCases() {
+    $.ajax({
+      url: '/api/test-case/list', method: 'POST', contentType: 'application/json',
+      data: JSON.stringify({interface_id: currentCaseInterface.id, page: casePage.page, page_size: casePage.page_size})
+    }).done(function (resp) {
+      var rows = (resp.data || []).map(function (item) {
+        var href = '/cases/' + item.id + '/edit?return_to=' + encodeURIComponent(currentReturnTo());
+        return '<tr><td>' + escapeHtml(item.name) + '</td><td>' + environmentBadge(item) + '</td><td><a class="btn btn-sm btn-outline-primary" href="' + href + '">查看</a></td></tr>';
+      }).join('');
+      $('#caseModalRows').html(rows || '<tr><td colspan="3" class="text-center text-secondary py-4">暂无关联用例</td></tr>');
+      renderPagination('#caseModalPagination', resp.pagination, function (page, pageSize) {
+        casePage = {page: page, page_size: pageSize}; loadInterfaceCases();
+      });
+    });
+  }
+
+  $('#interfaceRows').on('click', 'button', function () {
+    var id = Number($(this).data('id'));
+    if ($(this).data('action') === 'cases') {
+      currentCaseInterface = interfaces.find(function (item) { return item.id === id; });
+      casePage = {page: 1, page_size: 10};
+      $('#caseModalTitle').text('关联用例 - ' + currentCaseInterface.name);
+      caseModal.show(); loadInterfaceCases(); return;
+    }
+    if ($(this).data('action') === 'delete') {
+      AppDialog.confirm({
+        title: '删除接口',
+        message: '确认删除该接口？删除后无法恢复。',
+        confirmText: '确认删除',
+        tone: 'danger'
+      }).then(function (confirmed) {
+        if (!confirmed) return;
+        $.ajax({
+          url: '/api/interface-definition/delete',
+          method: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({interface_id: id})
+        })
+          .done(loadInterfaces)
+          .fail(function (xhr) { AppToast.error((xhr.responseJSON && xhr.responseJSON.message) || '删除失败'); });
+      });
+    }
+  });
+
+  $('#projectFilter').on('change', function () { renderModuleFilter(); });
+  $('#searchBtn').on('click', function () { interfacePage.page = 1; syncSearchUrl(); loadInterfaces(); });
+  $('#resetBtn').on('click', function () {
+    $('#projectFilter').val(''); $('#urlFilter').val(''); renderModuleFilter(); interfacePage = {page: 1, page_size: 10}; syncSearchUrl(); loadInterfaces();
+  });
+  $('#urlFilter').on('keydown', function (event) { if (event.key === 'Enter') { event.preventDefault(); $('#searchBtn').click(); } });
+
+  $.when(loadOptions()).done(function () {
+    var moduleId = Number(new URLSearchParams(window.location.search).get('module_id')) || null;
+    renderModuleFilter(moduleId);
+    loadInterfaces();
+  });
+</script>
+{% endblock %}

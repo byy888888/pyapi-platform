@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+
+{% block title %}通知管理 - 接口自动化测试平台{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1 class="h4 mb-1">通知管理</h1>
+    </div>
+    <button type="button" class="btn btn-primary" id="newNotificationBtn">新增通知</button>
+  </div>
+
+  <div class="panel">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th style="width:70px;">ID</th>
+          <th>名称</th>
+          <th style="width:110px;">类型</th>
+          <th>配置摘要</th>
+          <th style="width:90px;">状态</th>
+          <th style="width:180px;">更新时间</th>
+          <th style="width:150px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="notificationRows"></tbody>
+    </table>
+    <div id="notificationPagination" class="pagination-bar"></div>
+  </div>
+
+  <div class="modal fade" id="notificationModal" tabindex="-1" aria-labelledby="notificationModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <form class="modal-content" id="notificationForm">
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="notificationModalTitle">新增通知</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="notificationId">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label" for="notificationName">名称</label>
+              <input class="form-control" id="notificationName" maxlength="128" placeholder="例如：项目日报群" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="notificationType">类型</label>
+              <select class="form-select" id="notificationType">
+                <option value="dingtalk">dingtalk</option>
+                <option value="email">email</option>
+              </select>
+            </div>
+            <div class="col-md-12 dingtalk-field">
+              <label class="form-label" for="webhook">Webhook</label>
+              <input class="form-control" id="webhook" placeholder="https://oapi.dingtalk.com/robot/send?...">
+            </div>
+            <div class="col-md-12 dingtalk-field">
+              <label class="form-label" for="secret">加签 secret/token</label>
+              <input class="form-control" id="secret" placeholder="可为空">
+            </div>
+            <div class="col-md-6 email-field">
+              <label class="form-label" for="mailServer">SMTP 服务</label>
+              <input class="form-control" id="mailServer" placeholder="smtp.example.com">
+            </div>
+            <div class="col-md-3 email-field">
+              <label class="form-label" for="mailPort">端口</label>
+              <input class="form-control" id="mailPort" type="number" value="465" placeholder="465">
+            </div>
+            <div class="col-md-3 email-field">
+              <label class="form-label" for="mailSecurity">安全连接</label>
+              <select class="form-select" id="mailSecurity">
+                <option value="ssl">SSL</option>
+                <option value="tls">TLS</option>
+                <option value="none">无</option>
+              </select>
+            </div>
+            <div class="col-md-6 email-field">
+              <label class="form-label" for="sender">发件人</label>
+              <input class="form-control" id="sender" placeholder="robot@example.com">
+            </div>
+            <div class="col-md-6 email-field">
+              <label class="form-label" for="mailUsername">SMTP 用户名</label>
+              <input class="form-control" id="mailUsername" placeholder="可与发件人一致">
+            </div>
+            <div class="col-md-6 email-field">
+              <label class="form-label" for="password">授权码或密码</label>
+              <input class="form-control" id="password" type="password" placeholder="保存后列表脱敏">
+            </div>
+            <div class="col-md-6 email-field">
+              <label class="form-label" for="recipients">收件人</label>
+              <input class="form-control" id="recipients" placeholder="a@example.com,b@example.com">
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="messageTemplate">消息模板</label>
+              <textarea class="form-control font-monospace" id="messageTemplate" rows="5" placeholder="支持 {task_name} {total_count} {success_count} {fail_count} {error_count} {report_links}"></textarea>
+            </div>
+            <div class="col-12">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="notificationActive" checked>
+                <label class="form-check-label" for="notificationActive">启用</label>
+              </div>
+            </div>
+          </div>
+          <div class="alert alert-danger mt-3 d-none" id="notificationError"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var notificationModal = new bootstrap.Modal(document.getElementById('notificationModal'));
+  var notifications = [];
+  var notificationPage = {page: 1, page_size: 10};
+
+  function escapeHtml(text) {
+    return $('<div>').text(text || '').html();
+  }
+
+  function recipientsText(value) {
+    if (!value) {
+      return '';
+    }
+    if (Array.isArray(value)) {
+      return value.join(',');
+    }
+    return String(value);
+  }
+
+  function toggleNotificationFields() {
+    var type = $('#notificationType').val();
+    $('.dingtalk-field').toggle(type === 'dingtalk');
+    $('.email-field').toggle(type === 'email');
+  }
+
+  function loadNotifications() {
+    $.ajax({
+      url: '/api/notification-channel/list',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify(notificationPage)
+    }).done(function (resp) {
+      notifications = resp.data || [];
+      var rows = notifications.map(function (item) {
+        var config = item.config || {};
+        var summary = item.notification_type === 'dingtalk'
+          ? (config.webhook || '')
+          : recipientsText(config.recipients);
+        return '<tr>' +
+          '<td>' + item.id + '</td>' +
+          '<td class="fw-semibold">' + escapeHtml(item.name) + '</td>' +
+          '<td><span class="badge text-bg-info">' + escapeHtml(item.notification_type) + '</span></td>' +
+          '<td class="code-cell">' + escapeHtml(summary) + '</td>' +
+          '<td>' + (item.is_active ? '<span class="badge text-bg-success">启用</span>' : '<span class="badge text-bg-secondary">停用</span>') + '</td>' +
+          '<td>' + escapeHtml(item.updated_at) + '</td>' +
+          '<td><button class="btn btn-sm btn-outline-primary me-2" data-action="edit" data-id="' + item.id + '">编辑</button><button class="btn btn-sm btn-outline-danger" data-action="delete" data-id="' + item.id + '">删除</button></td>' +
+        '</tr>';
+      }).join('');
+      $('#notificationRows').html(rows || '<tr><td colspan="7" class="text-center text-secondary py-4">暂无通知</td></tr>');
+      renderPagination('#notificationPagination', resp.pagination, function (page, pageSize) {
+        notificationPage = {page: page, page_size: pageSize};
+        loadNotifications();
+      });
+    });
+  }
+
+  function openNotification(item) {
+    $('#notificationError').addClass('d-none').text('');
+    $('#notificationId').val(item ? item.id : '');
+    $('#notificationName').val(item ? item.name : '');
+    $('#notificationType').val(item ? item.notification_type : 'dingtalk');
+    var config = item ? item.raw_config || {} : {};
+    $('#webhook').val(config.webhook || '');
+    $('#secret').val(config.secret || '');
+    $('#mailServer').val(config.mail_server || '');
+    $('#mailPort').val(config.mail_port || 465);
+    $('#mailSecurity').val(config.mail_use_ssl ? 'ssl' : (config.mail_use_tls ? 'tls' : 'none'));
+    $('#sender').val(config.sender || '');
+    $('#mailUsername').val(config.mail_username || '');
+    $('#password').val(config.password || '');
+    $('#recipients').val(recipientsText(config.recipients));
+    $('#messageTemplate').val(item ? item.message_template : '');
+    $('#notificationActive').prop('checked', item ? item.is_active : true);
+    $('#notificationModalTitle').text(item ? '编辑通知' : '新增通知');
+    toggleNotificationFields();
+    notificationModal.show();
+  }
+
+  function collectConfig() {
+    if ($('#notificationType').val() === 'dingtalk') {
+      return {webhook: $('#webhook').val(), secret: $('#secret').val()};
+    }
+    return {
+      mail_server: $('#mailServer').val(),
+      mail_port: Number($('#mailPort').val() || 465),
+      mail_use_ssl: $('#mailSecurity').val() === 'ssl',
+      mail_use_tls: $('#mailSecurity').val() === 'tls',
+      sender: $('#sender').val(),
+      mail_username: $('#mailUsername').val(),
+      password: $('#password').val(),
+      recipients: $('#recipients').val().split(',').map(function (item) { return item.trim(); }).filter(Boolean)
+    };
+  }
+
+  $('#notificationType').on('change', toggleNotificationFields);
+  $('#newNotificationBtn').on('click', function () { openNotification(null); });
+  $('#notificationRows').on('click', 'button', function () {
+    var id = Number($(this).data('id'));
+    var action = $(this).data('action');
+    var item = notifications.find(function (row) { return row.id === id; });
+    if (action === 'edit') {
+      openNotification(item);
+    }
+    if (action === 'delete') {
+      AppDialog.confirm({
+        title: '删除通知配置',
+        message: '确认删除该通知配置？删除后无法恢复。',
+        confirmText: '确认删除',
+        tone: 'danger'
+      }).then(function (confirmed) {
+        if (!confirmed) return;
+        $.ajax({
+          url: '/api/notification-channel/delete',
+          method: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({notification_id: id})
+        }).done(loadNotifications)
+          .fail(function (xhr) { AppToast.error((xhr.responseJSON && xhr.responseJSON.message) || '删除失败'); });
+      });
+    }
+  });
+  $('#notificationForm').on('submit', function (event) {
+    event.preventDefault();
+    var id = $('#notificationId').val();
+    var payload = {
+      name: $('#notificationName').val(),
+      notification_type: $('#notificationType').val(),
+      config: collectConfig(),
+      message_template: $('#messageTemplate').val(),
+      is_active: $('#notificationActive').is(':checked')
+    };
+    if (id) {
+      payload.notification_id = Number(id);
+    }
+    $.ajax({
+      url: id ? '/api/notification-channel/save' : '/api/notification-channel/create',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify(payload)
+    }).done(function () {
+      notificationModal.hide();
+      loadNotifications();
+    }).fail(function (xhr) {
+      $('#notificationError').removeClass('d-none').text((xhr.responseJSON && xhr.responseJSON.message) || '保存失败');
+    });
+  });
+
+  loadNotifications();
+</script>
+{% endblock %}

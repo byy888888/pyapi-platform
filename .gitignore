@@ -1,0 +1,93 @@
+# Python 编译与缓存
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python 虚拟环境
+.venv/
+venv/
+env/
+ENV/
+
+# Python 构建产物
+build/
+dist/
+downloads/
+*.egg-info/
+.eggs/
+wheels/
+pip-wheel-metadata/
+
+# Flask 运行数据：保留 instance 目录，但忽略其中的本地数据
+/instance/*
+!/instance/.gitkeep
+
+# SQLite 数据库及运行时临时文件
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3-journal
+*.sqlite3-shm
+*.sqlite3-wal
+
+# 数据库备份
+*.bak
+*.backup
+*.dump
+backups/
+
+# 环境变量和本地敏感配置，保留示例文件
+.env
+.env.*
+!.env.example
+
+# 测试、覆盖率和静态检查缓存
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.pyre/
+.pytype/
+.ruff_cache/
+.hypothesis/
+
+# 日志与进程文件
+*.log
+logs/
+log/
+*.pid
+*.pid.lock
+
+# 临时文件
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.cache/
+
+# IDE 与编辑器配置
+.idea/
+.vscode/
+
+# 操作系统文件
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+
+# 本地 Docker 覆盖配置
+docker-compose.override.yml

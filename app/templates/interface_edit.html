@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+
+{% block title %}{{ '编辑 HTTP 接口' if interface_id else '新增 HTTP 接口' }} - 接口自动化测试平台{% endblock %}
+
+{% block head %}
+<style>
+  .interface-workbench {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    overflow: hidden;
+  }
+
+  .interface-meta {
+    display: grid;
+    grid-template-columns: minmax(160px, 220px) minmax(160px, 220px) minmax(180px, 1fr) 120px 90px minmax(240px, 1fr);
+    gap: 10px;
+    padding: 14px;
+    border-bottom: 1px solid #eef2f7;
+    align-items: center;
+  }
+
+  .interface-toolbar {
+    display: grid;
+    grid-template-columns: 130px minmax(260px, 1fr) auto auto;
+    gap: 10px;
+    padding: 14px;
+    border-bottom: 1px solid #eef2f7;
+    align-items: center;
+  }
+
+  .execution-env {
+    display: grid;
+    grid-template-columns: auto minmax(220px, 1fr);
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .execution-env label {
+    color: #475569;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  .request-tabs {
+    padding: 0 14px;
+    border-bottom: 1px solid #eef2f7;
+  }
+
+  .request-tabs .nav-link {
+    border: 0;
+    color: #4b5563;
+    padding: 13px 4px;
+    margin-right: 24px;
+  }
+
+  .request-tabs .nav-link.active {
+    color: #0d6efd;
+    border-bottom: 2px solid #0d6efd;
+    font-weight: 700;
+  }
+
+  .request-pane {
+    padding: 16px 18px 20px;
+    min-height: 220px;
+  }
+
+  .kv-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+
+  .kv-table th,
+  .kv-table td {
+    border-bottom: 1px solid #eef2f7;
+    padding: 8px;
+    vertical-align: middle;
+  }
+
+  .kv-table th {
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .kv-enabled {
+    width: 46px;
+    text-align: center;
+  }
+
+  .kv-action {
+    width: 64px;
+  }
+
+  .kv-table input,
+  .kv-table select {
+    border: 0;
+    box-shadow: none;
+  }
+
+  .kv-table input:focus,
+  .kv-table select:focus {
+    box-shadow: none;
+  }
+
+  .body-mode {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+
+  .body-mode .btn.active {
+    color: #fff;
+    background: #0d6efd;
+    border-color: #0d6efd;
+  }
+
+  .response-panel {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    margin-top: 14px;
+  }
+
+  .response-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #eef2f7;
+  }
+
+  .response-stats {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    color: #64748b;
+    font-size: 14px;
+  }
+
+  .response-body {
+    padding: 14px 16px 18px;
+  }
+
+  .response-empty {
+    min-height: 260px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+  }
+
+  .response-pre {
+    min-height: 240px;
+    max-height: 440px;
+    overflow: auto;
+    background: #f8fafc;
+  }
+
+  @media (max-width: 1199.98px) {
+      .interface-meta,
+      .interface-toolbar {
+        grid-template-columns: 1fr;
+      }
+
+      .execution-env {
+        grid-template-columns: 1fr;
+      }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1 class="h4 mb-1">{{ '编辑 HTTP 接口' if interface_id else '新增 HTTP 接口' }}</h1>
+      <div class="text-secondary small">HTTP 请求调试，支持 Curl 导入、Params、Body、Headers。</div>
+    </div>
+    <div class="d-flex gap-2">
+      {% if interface_id %}
+        <a class="btn btn-outline-primary" href="{{ url_for('cases.new_http_case', interface_id=interface_id, return_to=url_for('interfaces.edit_http_interface', interface_id=interface_id)) }}">新增 HTTP 用例</a>
+      {% endif %}
+      <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#curlImportModal">接口导入</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('interfaces.index') }}">返回列表</a>
+    </div>
+  </div>
+
+  <div class="interface-workbench">
+    <input type="hidden" id="interfaceId" value="{{ interface_id }}">
+    <input type="hidden" id="interfaceType" value="http">
+    <div class="interface-meta">
+      <select class="form-select" id="projectSelect" aria-label="项目"></select>
+      <div>
+        <input class="form-control" id="moduleInput" maxlength="128" placeholder="搜索或输入新模块" autocomplete="off">
+      </div>
+      <input class="form-control" id="interfaceName" maxlength="128" placeholder="接口名称" autocomplete="off">
+      <input class="form-control" id="timeoutSeconds" type="number" min="1" value="30" placeholder="超时秒数">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="interfaceActive" checked>
+        <label class="form-check-label" for="interfaceActive">启用</label>
+      </div>
+      <div class="execution-env">
+        <label for="environmentSelect">调试环境</label>
+        <select class="form-select" id="environmentSelect" aria-label="调试环境"></select>
+      </div>
+    </div>
+
+    <div class="interface-toolbar">
+      <select class="form-select fw-semibold" id="methodSelect" aria-label="请求方法"></select>
+      <input class="form-control font-monospace" id="requestUrl" placeholder="/api/login 或 {% raw %}{{base_url}}{% endraw %}/api/login">
+      <button type="button" class="btn btn-primary px-4" id="debugBtn">发送</button>
+      <button type="button" class="btn btn-outline-primary px-4" id="saveInterfaceBtn">{{ '保存接口' if interface_id else '创建接口' }}</button>
+    </div>
+
+    <ul class="nav request-tabs" id="requestTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#paramsPane" type="button" role="tab">Params</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#bodyPane" type="button" role="tab">Body</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#headersPane" type="button" role="tab">Headers <span class="badge text-bg-light" id="headersCount">0</span></button>
+      </li>
+    </ul>
+
+    <div class="tab-content">
+      <div class="tab-pane fade show active request-pane" id="paramsPane" role="tabpanel">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Query 参数</h2>
+          <button type="button" class="btn btn-sm btn-outline-primary" id="addParamBtn">添加参数</button>
+        </div>
+        <table class="kv-table" id="paramsTable">
+          <thead><tr><th class="kv-enabled">启用</th><th>参数名</th><th>参数值</th><th>说明</th><th class="kv-action">操作</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="tab-pane fade request-pane" id="bodyPane" role="tabpanel">
+        <div class="body-mode" role="group" aria-label="Body">
+          <button type="button" class="btn btn-sm btn-outline-secondary body-type" data-body-type="none">none</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary body-type" data-body-type="form-data">form-data</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary body-type" data-body-type="x-www-form-urlencoded">x-www-form-urlencoded</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary body-type" data-body-type="json">JSON</button>
+        </div>
+        <div id="bodyNone" class="text-secondary py-4">不发送 Body</div>
+        <div id="bodyKv">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h2 class="h6 mb-0">Body 参数</h2>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="addBodyParamBtn">添加参数</button>
+          </div>
+          <table class="kv-table" id="bodyTable">
+            <thead><tr><th class="kv-enabled">启用</th><th>参数名</th><th>参数值</th><th>说明</th><th class="kv-action">操作</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div id="bodyJson">
+          <div class="d-flex justify-content-end mb-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="beautifyJsonBtn">Beautify</button>
+          </div>
+          <textarea class="form-control font-monospace" id="bodyJsonText" rows="12" placeholder='{"username":"demo"}'>{}</textarea>
+        </div>
+      </div>
+
+      <div class="tab-pane fade request-pane" id="headersPane" role="tabpanel">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Headers</h2>
+          <div>
+            <button type="button" class="btn btn-sm btn-outline-secondary me-2" id="addPresetHeadersBtn">添加常用请求头</button>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="addHeaderBtn">添加 Header</button>
+          </div>
+        </div>
+        <table class="kv-table" id="headersTable">
+          <thead><tr><th class="kv-enabled">启用</th><th>Key</th><th>Value</th><th>Description</th><th class="kv-action">操作</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="alert alert-danger mt-3 d-none" id="interfaceError"></div>
+
+  <div class="response-panel">
+    <div class="response-header">
+      <h2 class="h5 mb-0">返回响应</h2>
+      <div class="response-stats">
+        <span class="badge text-bg-secondary" id="debugStatus">未发送</span>
+        <span id="debugElapsed">- ms</span>
+        <span id="debugSize">- B</span>
+      </div>
+    </div>
+    <ul class="nav request-tabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#responseBodyPane" type="button" role="tab">Body</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#responseHeadersPane" type="button" role="tab">Headers</button>
+      </li>
+    </ul>
+    <div class="tab-content response-body">
+      <div class="tab-pane fade show active" id="responseBodyPane" role="tabpanel">
+        <div class="response-empty" id="responseEmpty">暂无响应</div>
+        <pre class="response-pre border rounded p-3 small d-none" id="debugBody">-</pre>
+      </div>
+      <div class="tab-pane fade" id="responseHeadersPane" role="tabpanel">
+        <pre class="response-pre border rounded p-3 small" id="debugHeaders">-</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="curlImportModal" tabindex="-1" aria-labelledby="curlImportModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 class="modal-title fs-5" id="curlImportModalLabel">接口导入</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+        </div>
+        <div class="modal-body">
+          <label class="form-label" for="curlImportText">粘贴 curl 请求后点击识别导入，目前仅支持 curl 载体。</label>
+          <textarea class="form-control font-monospace" id="curlImportText" rows="12" placeholder="curl 'https://example.com/api/list?page=1' -H 'Authorization: Bearer {% raw %}{{token}}{% endraw %}'"></textarea>
+          <div class="alert alert-danger mt-3 d-none" id="curlImportError"></div>
+          <div class="alert alert-info mt-3 mb-0 d-none" id="curlImportInfo"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="button" class="btn btn-primary" id="applyCurlImportBtn">识别导入</button>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/interface_edit.js') }}"></script>
+{% endblock %}

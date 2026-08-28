@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}仪表盘 - 接口自动化测试平台{% endblock %}
+
+{% block head %}
+<style>
+  .dashboard-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+
+  .dashboard-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .dashboard-control { min-width: 150px; }
+
+  .dashboard-metrics {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .dashboard-chart-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.8fr);
+    gap: 16px;
+  }
+
+  .dashboard-chart-panel {
+    min-width: 0;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    padding: 18px;
+  }
+
+  .dashboard-chart-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .dashboard-chart-note {
+    color: #6b7280;
+    font-size: 12px;
+    margin: 4px 0 0;
+  }
+
+  .dashboard-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    color: #6b7280;
+    font-size: 12px;
+  }
+
+  .dashboard-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .dashboard-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--legend-color);
+  }
+
+  .dashboard-trend-wrap {
+    width: 100%;
+    min-height: 280px;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .dashboard-trend-svg { display: block; width: 100%; height: auto; }
+  .dashboard-trend-grid { stroke: #edf0f4; stroke-width: 1; }
+  .dashboard-trend-label { fill: #6b7280; font-size: 11px; }
+
+  .dashboard-donut-layout {
+    display: grid;
+    place-items: center;
+    gap: 18px;
+    padding-top: 14px;
+  }
+
+  .dashboard-donut {
+    --pass-stop: 0%;
+    --fail-stop: 0%;
+    --error-stop: 0%;
+    position: relative;
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    background: conic-gradient(
+      #22a06b 0 var(--pass-stop),
+      #e5a000 var(--pass-stop) var(--fail-stop),
+      #dc3545 var(--fail-stop) var(--error-stop),
+      #9ca3af var(--error-stop) 100%
+    );
+  }
+
+  .dashboard-donut.is-empty { background: #eef1f5; }
+
+  .dashboard-donut::after {
+    content: "";
+    position: absolute;
+    inset: 29px;
+    border-radius: 50%;
+    background: #fff;
+  }
+
+  .dashboard-donut-center {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: grid;
+    place-content: center;
+    text-align: center;
+  }
+
+  .dashboard-pass-rate {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .dashboard-pass-rate-label {
+    color: #6b7280;
+    font-size: 12px;
+    margin-top: 3px;
+  }
+
+  .dashboard-result-list { display: grid; gap: 10px; width: 100%; }
+
+  .dashboard-result-row {
+    display: grid;
+    grid-template-columns: 14px 1fr auto;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+  }
+
+  .dashboard-result-count {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (max-width: 1199.98px) {
+    .dashboard-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+
+  @media (max-width: 899.98px) {
+    .dashboard-chart-grid { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 575.98px) {
+    .dashboard-toolbar { align-items: stretch; flex-direction: column; }
+    .dashboard-controls, .dashboard-control { width: 100%; }
+    .dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <div class="dashboard-toolbar">
+    <div>
+      <h1 class="h3 mb-1">仪表盘</h1>
+      <p class="text-secondary mb-0">定时任务执行质量与项目资源概览</p>
+    </div>
+    <div class="dashboard-controls">
+      <div class="dashboard-control">
+        <label class="form-label mb-1" for="dashboardProjectFilter">统计项目</label>
+        <select class="form-select" id="dashboardProjectFilter">
+          <option value="">全部项目</option>
+        </select>
+      </div>
+      <div class="dashboard-control">
+        <label class="form-label mb-1" for="dashboardDaysFilter">统计周期</label>
+        <select class="form-select" id="dashboardDaysFilter">
+          <option value="7">最近 7 天</option>
+          <option value="14" selected>最近 14 天</option>
+          <option value="30">最近 30 天</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="alert alert-danger d-none" id="dashboardError" role="alert"></div>
+
+  <div class="dashboard-metrics" aria-label="资源统计">
+    <div class="metric-card"><div class="metric-label">项目数</div><div class="metric-value" id="projectMetric">-</div></div>
+    <div class="metric-card"><div class="metric-label">接口数</div><div class="metric-value" id="interfaceMetric">-</div></div>
+    <div class="metric-card"><div class="metric-label">用例数</div><div class="metric-value" id="caseMetric">-</div></div>
+    <div class="metric-card"><div class="metric-label">集合数</div><div class="metric-value" id="suiteMetric">-</div></div>
+    <div class="metric-card"><div class="metric-label">定时任务报告</div><div class="metric-value" id="reportMetric">-</div></div>
+  </div>
+
+  <div class="dashboard-chart-grid">
+    <section class="dashboard-chart-panel" aria-labelledby="trendTitle">
+      <div class="dashboard-chart-head">
+        <div>
+          <h2 class="h6 mb-0" id="trendTitle">用例执行趋势</h2>
+          <p class="dashboard-chart-note statistics-period-note">仅统计定时任务 · 最近 14 天</p>
+        </div>
+        <div class="dashboard-legend" aria-label="执行趋势图例">
+          <span class="dashboard-legend-item"><i class="dashboard-legend-dot" style="--legend-color:#22a06b"></i>通过</span>
+          <span class="dashboard-legend-item"><i class="dashboard-legend-dot" style="--legend-color:#e5a000"></i>失败</span>
+          <span class="dashboard-legend-item"><i class="dashboard-legend-dot" style="--legend-color:#dc3545"></i>错误</span>
+          <span class="dashboard-legend-item"><i class="dashboard-legend-dot" style="--legend-color:#9ca3af"></i>跳过</span>
+        </div>
+      </div>
+      <div class="dashboard-trend-wrap" id="trendChartWrap">
+        <svg class="dashboard-trend-svg" id="trendChart" role="img" aria-labelledby="trendChartTitle trendChartDescription"></svg>
+      </div>
+    </section>
+
+    <section class="dashboard-chart-panel" aria-labelledby="distributionTitle">
+      <div>
+        <h2 class="h6 mb-0" id="distributionTitle">用例执行结果分布</h2>
+        <p class="dashboard-chart-note statistics-period-note">仅统计定时任务 · 最近 14 天</p>
+      </div>
+      <div class="dashboard-donut-layout">
+        <div class="dashboard-donut is-empty" id="resultDonut" role="img" aria-label="暂无定时任务执行数据">
+          <div class="dashboard-donut-center">
+            <div class="dashboard-pass-rate" id="passRate">0.0%</div>
+            <div class="dashboard-pass-rate-label">通过率</div>
+          </div>
+        </div>
+        <div class="dashboard-result-list" aria-live="polite">
+          <div class="dashboard-result-row"><i class="dashboard-legend-dot" style="--legend-color:#22a06b"></i><span>通过</span><span class="dashboard-result-count" id="passCount">0</span></div>
+          <div class="dashboard-result-row"><i class="dashboard-legend-dot" style="--legend-color:#e5a000"></i><span>失败</span><span class="dashboard-result-count" id="failCount">0</span></div>
+          <div class="dashboard-result-row"><i class="dashboard-legend-dot" style="--legend-color:#dc3545"></i><span>错误</span><span class="dashboard-result-count" id="errorCount">0</span></div>
+          <div class="dashboard-result-row"><i class="dashboard-legend-dot" style="--legend-color:#9ca3af"></i><span>跳过</span><span class="dashboard-result-count" id="skippedCount">0</span></div>
+        </div>
+      </div>
+    </section>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}
