@@ -643,7 +643,11 @@
   $.post({url: '/api/data-factory/options', contentType: 'application/json', data: '{}'}).done(function (resp) {
     optionData = resp.data || {};
     $('#factoryProject').append((optionData.projects || []).map(function (item) { return '<option value="' + item.id + '">' + escapeHtml(item.name) + '</option>'; }).join(''));
-    $('#factoryEnvironment').html((optionData.environments || []).map(function (item) { return '<option value="' + item.id + '">' + escapeHtml(item.name + (item.base_url ? ' - ' + item.base_url : '')) + '</option>'; }).join(''));
+    AppSelect.fill('#factoryEnvironment', optionData.environments, {
+      label: function (item) { return item.name + (item.base_url ? ' - ' + item.base_url : ''); },
+      emptyText: '暂无环境',
+      emptyHint: '暂无执行环境，请先到「环境与变量管理」创建'
+    });
     if (factoryId) {
       $.ajax({url: '/api/data-factory/detail', method: 'POST', contentType: 'application/json', data: JSON.stringify({factory_id: Number(factoryId)})}).done(function (detailResp) { fillFactory(detailResp.data); });
     } else {

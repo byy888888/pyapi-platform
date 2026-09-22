@@ -272,7 +272,7 @@
       hookFunctions = resp.data || [];
       var rows = hookFunctions.map(function (item) {
         var params = (item.params || []).map(function (param) {
-          return param.name + ': ' + param.description;
+          return param.description ? (param.name + ': ' + param.description) : param.name;
         }).join(' / ');
         return '<tr>' +
           '<td class="fw-semibold">' + escapeHtml(item.name) + '</td>' +

@@ -146,6 +146,25 @@ class VariableApiTestCase(unittest.TestCase):
         names = [item["name"] for item in response.json["data"]]
         self.assertIn("setrsa", names)
 
+    def test_hook_function_params_include_description(self):
+        """验证每个钩子函数参数都带有名称和说明，避免页面渲染出 undefined。"""
+        response = self.client.post("/api/hook-function/list", json={})
+
+        self.assertEqual(response.status_code, 200)
+        incomplete = []
+        for item in response.json["data"]:
+            for param in item.get("params") or []:
+                name = str(param.get("name") or "").strip()
+                description = str(param.get("description") or "").strip()
+                if not name or not description:
+                    incomplete.append("%s(%s)" % (item.get("name"), name or "未命名参数"))
+
+        self.assertEqual(
+            incomplete,
+            [],
+            "以下钩子函数的参数缺少名称或说明: %s" % ", ".join(incomplete),
+        )
+
 
 def base64_to_bytes(value):
     """将 Base64 文本解码为原始字节数据。"""

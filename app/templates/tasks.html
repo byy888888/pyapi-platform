@@ -151,9 +151,11 @@
       }).join('');
       $('#taskEnvironmentType').html(typeOptions);
       $('#taskEnvironmentTypeFilter').html('<option value="">全部环境类型</option>' + typeOptions);
-      $('#notificationSelect').html(options.notifications.map(function (item) {
-        return '<option value="' + item.id + '">' + escapeHtml(item.name + ' [' + item.notification_type + ']') + '</option>';
-      }).join(''));
+      AppSelect.fill('#notificationSelect', options.notifications, {
+        label: function (item) { return item.name + ' [' + item.notification_type + ']'; },
+        emptyText: '暂无通知渠道',
+        emptyHint: '暂无通知渠道，请先到「通知管理」创建'
+      });
     });
   }
 

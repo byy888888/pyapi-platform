@@ -389,13 +389,16 @@
       data: JSON.stringify({})
     }).done(function (resp) {
       suiteOptions = resp.data || {projects: [], environments: [], cases: []};
-      $('#projectSelect').html(suiteOptions.projects.map(function (item) {
-        return '<option value="' + item.id + '">' + escapeHtml(item.name) + '</option>';
-      }).join(''));
-      var environmentOptions = suiteOptions.environments.map(function (item) {
-        return '<option value="' + item.id + '">' + escapeHtml(item.name + '（' + item.environment_type_name + '）') + '</option>';
-      }).join('');
-      $('#suiteEnvironmentSelect').html(environmentOptions);
+      AppSelect.fill('#projectSelect', suiteOptions.projects, {
+        label: function (item) { return item.name; },
+        emptyText: '暂无项目',
+        emptyHint: '暂无项目，请先到「项目管理」创建'
+      });
+      AppSelect.fill('#suiteEnvironmentSelect', suiteOptions.environments, {
+        label: function (item) { return item.name + '（' + item.environment_type_name + '）'; },
+        emptyText: '暂无环境',
+        emptyHint: '暂无执行环境，请先到「环境与变量管理」创建'
+      });
       renderStepMethodOptions();
       renderStepBodyTypeOptions();
       renderCasePool();
@@ -420,13 +423,14 @@
 
   function renderCasePool() {
     var projectId = Number($('#projectSelect').val());
-    var options = suiteOptions.cases.filter(function (item) {
+    var cases = suiteOptions.cases.filter(function (item) {
       return Number(item.project_id) === projectId;
-    }).map(function (item) {
-      var label = item.name + ' / ' + item.interface_name + ' [' + item.interface_type + ']';
-      return '<option value="' + item.id + '">' + escapeHtml(label) + '</option>';
-    }).join('');
-    $('#casePool').html(options);
+    });
+    AppSelect.fill('#casePool', cases, {
+      label: function (item) { return item.name + ' / ' + item.interface_name + ' [' + item.interface_type + ']'; },
+      emptyText: '暂无用例',
+      emptyHint: '当前项目下还没有用例，请先到「接口用例」创建'
+    });
     renderSelectedSteps();
   }
 

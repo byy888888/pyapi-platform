@@ -81,16 +81,19 @@ function loadOptions() {
 }
 
 function renderProjectOptions() {
-  $('#projectSelect').html(caseOptions.projects.map(function (item) {
-    return '<option value="' + item.id + '">' + escapeHtml(item.name) + '</option>';
-  }).join(''));
+  AppSelect.fill('#projectSelect', caseOptions.projects, {
+    label: function (item) { return item.name; },
+    emptyText: '暂无项目',
+    emptyHint: '暂无项目，请先到「项目管理」创建'
+  });
 }
 
 function renderEnvironmentOptions() {
-  $('#environmentSelect').html(caseOptions.environments.map(function (item) {
-    var baseUrl = item.base_url ? ' - ' + item.base_url : '';
-    return '<option value="' + item.id + '">' + escapeHtml(item.name + baseUrl) + '</option>';
-  }).join(''));
+  AppSelect.fill('#environmentSelect', caseOptions.environments, {
+    label: function (item) { return item.name + (item.base_url ? ' - ' + item.base_url : ''); },
+    emptyText: '暂无环境',
+    emptyHint: '暂无执行环境，请先到「环境与变量管理」创建'
+  });
 }
 
 function renderMethodOptions() {
@@ -102,12 +105,14 @@ function renderMethodOptions() {
 
 function renderInterfaceOptions() {
   var projectId = Number($('#projectSelect').val());
-  var options = caseOptions.interfaces.filter(function (item) {
+  var interfaces = caseOptions.interfaces.filter(function (item) {
     return Number(item.project_id) === projectId && item.interface_type === 'http';
-  }).map(function (item) {
-    return '<option value="' + item.id + '">' + escapeHtml(item.name + ' [' + item.interface_type + ']') + '</option>';
-  }).join('');
-  $('#interfaceSelect').html(options);
+  });
+  AppSelect.fill('#interfaceSelect', interfaces, {
+    label: function (item) { return item.name + ' [' + item.interface_type + ']'; },
+    emptyText: '暂无接口',
+    emptyHint: '当前项目下还没有接口，请先到「接口库」创建'
+  });
   applySelectedInterface();
 }
 

@@ -14,8 +14,16 @@
   function loadOptions() {
     return post('/api/test-case/options', {}).done(function (resp) {
       options = resp.data || options;
-      $('#projectSelect').html((options.projects || []).map(function (item) { return '<option value="' + item.id + '">' + escapeHtml(item.name) + '</option>'; }).join(''));
-      $('#environmentSelect').html((options.environments || []).map(function (item) { return '<option value="' + item.id + '">' + escapeHtml(item.name + (item.base_url ? ' - ' + item.base_url : '')) + '</option>'; }).join(''));
+      AppSelect.fill('#projectSelect', options.projects, {
+        label: function (item) { return item.name; },
+        emptyText: '暂无项目',
+        emptyHint: '暂无项目，请先到「项目管理」创建'
+      });
+      AppSelect.fill('#environmentSelect', options.environments, {
+        label: function (item) { return item.name + (item.base_url ? ' - ' + item.base_url : ''); },
+        emptyText: '暂无环境',
+        emptyHint: '暂无执行环境，请先到「环境与变量管理」创建'
+      });
       renderInterfaces();
     });
   }
@@ -23,7 +31,11 @@
   function renderInterfaces(selectedId) {
     var projectId = Number($('#projectSelect').val());
     var list = (options.interfaces || []).filter(function (item) { return item.interface_type === 'websocket' && Number(item.project_id) === projectId; });
-    $('#interfaceSelect').html(list.map(function (item) { return '<option value="' + item.id + '">' + escapeHtml(item.module_name + ' / ' + item.name) + '</option>'; }).join(''));
+    AppSelect.fill('#interfaceSelect', list, {
+      label: function (item) { return item.module_name + ' / ' + item.name; },
+      emptyText: '暂无接口',
+      emptyHint: '当前项目下还没有 WebSocket 接口，请先到「接口库」创建'
+    });
     if (selectedId) $('#interfaceSelect').val(String(selectedId));
     applyInterface();
   }

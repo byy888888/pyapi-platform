@@ -329,6 +329,51 @@
     });
   }
 
+  function escapeOptionText(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function resolveSelectElement(target) {
+    if (!target) return null;
+    if (typeof target === 'string') return document.querySelector(target);
+    if (target.jquery) return target[0] || null;
+    return target.nodeType === 1 ? target : null;
+  }
+
+  /**
+   * 填充下拉框选项；数据为空时渲染占位提示并禁用控件，避免出现空白下拉框。
+   * @param {string|Element|Object} target 选择器、DOM 元素或 jQuery 对象
+   * @param {Array} items 选项数据
+   * @param {Object} config 配置项：value 取值字段、label 文案函数、emptyText 空数据短提示、emptyHint 悬停完整指引
+   */
+  function fillSelectOptions(target, items, config) {
+    var element = resolveSelectElement(target);
+    if (!element) return;
+    var settings = Object.assign({
+      value: 'id',
+      label: function (item) { return item.name; },
+      emptyText: '暂无可选项',
+      emptyHint: ''
+    }, config || {});
+    var list = items || [];
+    if (!list.length) {
+      element.innerHTML = '<option value="">' + escapeOptionText(settings.emptyText) + '</option>';
+      element.disabled = true;
+      element.title = settings.emptyHint || settings.emptyText;
+      return;
+    }
+    element.disabled = false;
+    element.title = '';
+    element.innerHTML = list.map(function (item) {
+      return '<option value="' + escapeOptionText(item[settings.value]) + '">' +
+        escapeOptionText(settings.label(item)) + '</option>';
+    }).join('');
+  }
+
   var elements = dialogElements();
   if (elements.confirmButton) {
     elements.confirmButton.addEventListener('click', function () {
@@ -361,6 +406,9 @@
     attach: attachCombobox,
     destroyWithin: destroyComboboxesWithin,
     headerOptions: commonHeaderOptions.slice()
+  };
+  window.AppSelect = {
+    fill: fillSelectOptions
   };
   disableBrowserInputHistory(document);
   new MutationObserver(function (mutations) {

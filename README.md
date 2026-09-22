@@ -19,14 +19,14 @@
 
 ## 2. 技术栈
 
-- Python 3.8（项目按 Python 3.8 语法和依赖约束开发）。
-- Flask 2.2、Jinja2、Bootstrap 5、jQuery。
+- Python 3.12（Docker 镜像、本地开发环境和依赖基线统一为 3.12）。
+- Flask 3.1、Jinja2 3.1、Bootstrap 5、jQuery。
 - Flask-SQLAlchemy、SQLAlchemy 1.4、Flask-Migrate、Alembic。
 - MySQL 5.7，字符集 `utf8mb4`。
 - APScheduler、requests、websocket-client、jsonpath-ng。
 - Docker Compose、Gunicorn gthread。
 
-> Python 3.8 已停止官方安全维护。当前版本为兼容既有环境继续使用；升级 Python 前需要重新验证依赖和全部功能。
+> 项目已从 Python 3.8 迁移到 Python 3.12，并同步完成依赖安全升级（Flask 3.1、Werkzeug 3.1、Jinja2 3.1、requests 2.33、urllib3 2.7、gunicorn 23）。不再兼容 Python 3.8，本地虚拟环境需要按 3.12 重建。
 
 ## 3. 项目结构
 
@@ -127,7 +127,7 @@ http://127.0.0.1:5000
 
 ### 5.1 准备软件
 
-- Python 3.8。
+- Python 3.12。
 - MySQL 5.7。
 - Git。
 
@@ -140,12 +140,12 @@ Set-Location E:\JG_API\api_test_platform
 ### 5.2 创建虚拟环境并安装依赖
 
 ```powershell
-py -3.8 -m venv .venv
+py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-没有 `py` 命令时，请用 Python 3.8 的完整安装路径执行 `-m venv .venv`。
+没有 `py` 命令时，请用 Python 3.12 的完整安装路径执行 `-m venv .venv`。
 
 ### 5.3 创建 MySQL 数据库
 
@@ -197,7 +197,7 @@ $env:SCHEDULER_TIMEZONE="Asia/Shanghai"
 先按上一节创建 MySQL 数据库，然后执行：
 
 ```bash
-python3.8 -m venv .venv
+python3.12 -m venv .venv
 ./.venv/bin/python -m pip install --upgrade pip
 ./.venv/bin/python -m pip install -r requirements.txt
 
@@ -351,6 +351,8 @@ docker compose up -d --build web
 - [数据工厂功能说明](docs/数据工厂功能说明.md)
 - [环境与变量解耦存量数据清理](docs/环境变量解耦存量数据清理.md)
 - [0-1 历史设计与开发基线](docs/接口自动化平台0-1开发.md)
+- [技术债与升级计划](docs/技术债与升级计划.md)
+- [平台对接 CI 方案](docs/平台对接CI方案.md)
 
 ## 14. 安全注意事项
 

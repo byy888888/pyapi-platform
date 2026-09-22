@@ -85,9 +85,11 @@ function loadOptions() {
 }
 
 function renderProjectOptions() {
-  $('#projectSelect').html(interfaceOptions.projects.map(function (item) {
-    return '<option value="' + item.id + '">' + escapeHtml(item.name) + '</option>';
-  }).join(''));
+  AppSelect.fill('#projectSelect', interfaceOptions.projects, {
+    label: function (item) { return item.name; },
+    emptyText: '暂无项目',
+    emptyHint: '暂无项目，请先到「项目管理」创建'
+  });
 }
 
 function projectModules() {
@@ -114,10 +116,11 @@ function selectedModule() {
 }
 
 function renderEnvironmentOptions() {
-  $('#environmentSelect').html((interfaceOptions.environments || []).map(function (item) {
-    var baseUrl = item.base_url ? ' - ' + item.base_url : '';
-    return '<option value="' + item.id + '">' + escapeHtml(item.name + baseUrl) + '</option>';
-  }).join(''));
+  AppSelect.fill('#environmentSelect', interfaceOptions.environments, {
+    label: function (item) { return item.name + (item.base_url ? ' - ' + item.base_url : ''); },
+    emptyText: '暂无环境',
+    emptyHint: '暂无执行环境，请先到「环境与变量管理」创建'
+  });
   restoreDebugEnvironment();
 }
 

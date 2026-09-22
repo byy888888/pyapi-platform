@@ -127,7 +127,11 @@
       environmentOptions = resp.data.environments || [];
       var projects = (resp.data.projects || []).map(function (item) { return '<option value="' + item.id + '">' + escapeHtml(item.name) + '</option>'; }).join('');
       $('#projectFilter').append(projects);
-      $('#executeEnvironment').html(environmentOptions.map(function (item) { return '<option value="' + item.id + '">' + escapeHtml(item.name + (item.base_url ? ' - ' + item.base_url : '')) + '</option>'; }).join(''));
+      AppSelect.fill('#executeEnvironment', environmentOptions, {
+        label: function (item) { return item.name + (item.base_url ? ' - ' + item.base_url : ''); },
+        emptyText: '暂无环境',
+        emptyHint: '暂无执行环境，请先到「环境与变量管理」创建'
+      });
     });
   }
 
